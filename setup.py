@@ -35,7 +35,7 @@ setup(
             Extension("fanok.utils._cholesky", ["fanok/utils/_cholesky.pyx"]),
         ],
         compiler_directives={"language_level": "3"},
-        annotate=True,
+        annotate=False,
     ),
     include_dirs=[np.get_include()],
 )
