@@ -1,21 +1,21 @@
 # FANOK: Generating knockoffs in linear time
 
-FANOK is a Python implementation of the gaussian knockoffs framework
+FANOK is a Python implementation of the Gaussian knockoffs framework
 developed by Barber-Candès [[1]](#1) [[2]](#2).
-It provides fast algorithms to generate gaussian knockoffs in high-dimensions.
+It provides fast algorithms to generate Gaussian knockoffs in high-dimensions.
 
-# Installation
+## Installation
 
-## Requirements
+### Requirements
 
 This package requires NumPy, Scipy and Scikit-Learn.
 Use `pip install requirements.txt` to install them.
 
-# Usage
+## Usage
 
 See `examples/` to find examples.
 
-# References
+## References
 
 <a id="1">[1]</a>
 Barber, R. F. and Candès, E. J. (2015).

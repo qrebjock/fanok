@@ -29,8 +29,8 @@ setup(
             Extension(
                 "fanok.factor_model._shrinkage",
                 ["fanok/factor_model/_shrinkage.pyx"],
-                extra_compile_args=["-fopenmp"],
-                extra_link_args=["-fopenmp"],
+                # extra_compile_args=["-fopenmp"],
+                # extra_link_args=["-fopenmp"],
             ),
             Extension("fanok.utils._cholesky", ["fanok/utils/_cholesky.pyx"]),
         ],

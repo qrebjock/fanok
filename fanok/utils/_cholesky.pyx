@@ -12,9 +12,10 @@ from libc.math cimport abs as cabs
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
-cpdef void cholupdate(int p, double[:, ::1] R, double[::1] u) nogil:
+cdef void cholupdate(int p, double[:, ::1] R, double[::1] u) nogil:
     """
     Positive Cholesky rank-1 update.
+    R must be upper-triangular and C-contiguous.
     """
     cdef:
         int inc = 1
@@ -33,9 +34,11 @@ cpdef void cholupdate(int p, double[:, ::1] R, double[::1] u) nogil:
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
-cpdef bint choldowndate(int p, double[:, ::1] R, double[::1] z):
+cdef bint choldowndate(int p, double[:, ::1] R, double[::1] z) nogil:
     """
     Negative Cholesky rank-1 update.
+    Returns False if the update failed (matrix not psd), True otherwise.
+    R must be upper-triangular and C-contiguous.
     """
     cdef:
         int inc = 1
@@ -55,7 +58,6 @@ cpdef bint choldowndate(int p, double[:, ::1] R, double[::1] z):
         if size > 0:
             c1 = R[k, k] / r
             c2 = -z[k] / r
-
             dscal(&size, &c1, &R[k, k + 1], &inc)
             daxpy(&size, &c2, &z[k + 1], &inc, &R[k, k + 1], &inc)
 
@@ -64,8 +66,6 @@ cpdef bint choldowndate(int p, double[:, ::1] R, double[::1] z):
             dscal(&size, &c1, &z[k + 1], &inc)
             daxpy(&size, &c2, &R[k, k + 1], &inc, &z[k + 1], &inc)
 
-        # R[k, k + 1:] = R[k, k] / rbar * R[k, k + 1:] - z[k] / rbar * z[k + 1:]
-        # z[k + 1:] = rbar / R[k, k] * z[k + 1:] - z[k] / R[k, k] * R[k, k + 1:]
         R[k, k] = r
 
     return True

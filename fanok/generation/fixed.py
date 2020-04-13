@@ -3,7 +3,7 @@ import numpy as np
 from scipy.linalg import eigh, inv, null_space
 
 from .base import KnockoffsGenerator
-from fanok.sdp import solve_sdp
+from fanok.sdp import solve_full_sdp
 
 
 def compute_mat_a(inv_cap_sigma: np.ndarray, s: np.ndarray):
@@ -11,8 +11,8 @@ def compute_mat_a(inv_cap_sigma: np.ndarray, s: np.ndarray):
     return 2 * mat_s - mat_s @ inv_cap_sigma @ mat_s
 
 
-def compute_mat_c(cap_sigma: np.ndarray):
-    s, v = eigh(cap_sigma)
+def compute_mat_c(Sigma: np.ndarray):
+    s, v = eigh(Sigma)
     s = np.clip(s, a_min=0, a_max=None)  # Correcting computation errors
     return np.diag(np.sqrt(s)) @ v.T
 
@@ -22,9 +22,9 @@ def compute_mat_u_tilde(x: np.ndarray):
 
 
 def fixed_x_parameters(x: np.ndarray, mode: str = "equi"):
-    cap_sigma = x.T @ x
-    inv_cap_sigma = inv(cap_sigma)
-    s = solve_sdp(cap_sigma, mode=mode)
+    Sigma = x.T @ x
+    inv_cap_sigma = inv(Sigma)
+    s = solve_full_sdp(Sigma, mode=mode)
     mat_a = compute_mat_a(inv_cap_sigma, s)
     mat_c = compute_mat_c(mat_a)
     mat_u_tilde = compute_mat_u_tilde(x)
@@ -60,7 +60,7 @@ def fixed_x_extended_knockoffs(x: np.ndarray, mode: str = "equi"):
     return fixed_x_natural_knockoffs(fixed_x_extend_x(x), mode=mode)
 
 
-def fixed_x_knockoffs(
+def fixed_knockoffs(
     x: np.ndarray,
     mode: str = "equi",
     y: np.ndarray = None,
@@ -98,14 +98,14 @@ def fixed_x_knockoffs(
 
 
 def are_fixed_knockoffs_valid(x: np.ndarray, x_tilde: np.ndarray):
-    cap_sigma = x.T @ x
+    Sigma = x.T @ x
     cap_sigma_tilde = x_tilde.T @ x_tilde
 
-    difference = cap_sigma - x.T @ x_tilde
+    difference = Sigma - x.T @ x_tilde
     diagonal = np.diagonal(difference)
 
     return (
-        np.allclose(cap_sigma, cap_sigma_tilde)
+        np.allclose(Sigma, cap_sigma_tilde)
         and np.allclose(difference - np.diag(diagonal), 0)
         and (diagonal >= -1e-12).all()
     )
@@ -128,7 +128,7 @@ class FixedKnockoffs(KnockoffsGenerator):
         return self
 
     def transform(self, x: np.ndarray, y: np.ndarray = None):
-        return fixed_x_knockoffs(
+        return fixed_knockoffs(
             x,
             mode=self.mode,
             y=y,

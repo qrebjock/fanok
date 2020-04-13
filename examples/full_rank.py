@@ -7,7 +7,7 @@ from fanok import (
 from fanok.statistics import EstimatorKnockoffStatistics
 
 
-X, y, coef = make_regression(n_samples=100, n_features=200, n_informative=20, coef=True)
+X, y, coef = make_regression(n_samples=100, n_features=150, n_informative=20, coef=True)
 
 knockoffs = GaussianKnockoffs()
 statistics = EstimatorKnockoffStatistics()

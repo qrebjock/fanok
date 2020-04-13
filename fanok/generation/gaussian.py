@@ -3,7 +3,7 @@ import numpy as np
 from scipy.linalg import cholesky, lstsq
 from sklearn.covariance import empirical_covariance, ledoit_wolf, GraphicalLassoCV
 
-from fanok.sdp import solve_sdp, sdp_low_rank
+from fanok.sdp import solve_full_sdp, sdp_low_rank
 from fanok.factor_model import FactorModel
 from .base import KnockoffsGenerator
 
@@ -31,7 +31,7 @@ def gaussian_knockoffs_sampling_parameters(
     X: np.ndarray = None,
     mu: np.ndarray = None,
     Sigma: np.ndarray = None,
-    sdp_mode: str = "equi",
+    sdp_mode: str = "sdp",
     covariance_mode: str = "wolf",
     assume_centered: bool = False,
     cov_tol: float = 1e-6,
@@ -47,7 +47,7 @@ def gaussian_knockoffs_sampling_parameters(
             X, mode=covariance_mode, assume_centered=assume_centered
         )
 
-    S = solve_sdp(Sigma, mode=sdp_mode, return_diag=True)
+    S = solve_full_sdp(Sigma, mode=sdp_mode, return_diag=True)
     mul = lstsq(Sigma, S)[0]
 
     mu_tilde = X - (X - mu) @ mul
@@ -58,7 +58,7 @@ def gaussian_knockoffs_sampling_parameters(
 
 def sample_gaussian_knockoffs(mean: np.ndarray, L: np.ndarray):
     """
-    Sample gaussian knockoffs given the mean parameter and
+    Sample Gaussian knockoffs given the mean parameter and
     the (lower) Cholesky factor of the covariance matrix.
     """
     z = np.random.normal(size=mean.shape)  # z ~ N(0, 1)
@@ -69,10 +69,10 @@ def gaussian_knockoffs(
     X,
     covariance_mode: str = "wolf",
     assume_centered: bool = False,
-    sdp_mode: str = "equi",
+    sdp_mode: str = "sdp",
 ):
     """
-    Sample gaussian knockoffs from the original samples.
+    Sample Gaussian knockoffs from the original samples.
     """
     mu_tilde, Sigma_tilde = gaussian_knockoffs_sampling_parameters(
         X,
@@ -90,7 +90,7 @@ class GaussianKnockoffs(KnockoffsGenerator):
 
     def __init__(
         self,
-        sdp_mode: str = "equi",
+        sdp_mode: str = "sdp",
         covariance_mode: str = "wolf",
         assume_centered: bool = False,
     ):
@@ -100,11 +100,7 @@ class GaussianKnockoffs(KnockoffsGenerator):
         self.assume_centered = assume_centered
 
     def fit(
-        self,
-        X: np.ndarray = None,
-        y: np.ndarray = None,
-        mu: np.ndarray = None,
-        Sigma: np.ndarray = None,
+        self, X: np.ndarray = None, mu: np.ndarray = None, Sigma: np.ndarray = None,
     ):
         self.mu_tilde_, Sigma_tilde = gaussian_knockoffs_sampling_parameters(
             X=X,
@@ -118,14 +114,14 @@ class GaussianKnockoffs(KnockoffsGenerator):
 
         return self
 
-    def transform(self, X: np.ndarray, y: np.ndarray = None):
+    def transform(self, X: np.ndarray):
         # check_is_fitted(self, ['mu_tilde_', 'cholesky_'])
         return sample_gaussian_knockoffs(self.mu_tilde_, self.cholesky_)
 
 
 class LowRankGaussianKnockoffs(KnockoffsGenerator):
     """
-    Low-rank gaussian knockoffs.
+    Low-rank Gaussian knockoffs.
     Requires a factor-model for the covariance matrix.
     """
 
@@ -137,7 +133,6 @@ class LowRankGaussianKnockoffs(KnockoffsGenerator):
     def fit(
         self,
         X: np.ndarray = None,
-        y: np.ndarray = None,
         mu: np.ndarray = None,
         d: np.ndarray = None,
         U: np.ndarray = None,
@@ -160,7 +155,7 @@ class LowRankGaussianKnockoffs(KnockoffsGenerator):
             d, U, singular_values * singular_values, s
         )
 
-    def transform(self, X: np.ndarray, y: np.ndarray = None):
+    def transform(self, X: np.ndarray):
         return sample_low_rank_gaussian_knockoffs(
             X, d=self.d_, s=self.s_, c=self.c_, Z=self.Z_, P=self.P_
         )
@@ -200,7 +195,8 @@ def sample_low_rank_gaussian_knockoffs(
 def sample_low_rank_gaussian(n: int, c: np.ndarray, Z: np.ndarray):
     """
     Sample n vectors from the normal distribution N(0, Omega)
-    where Omega = diag(c) + Z * Z^T.
+    where Omega = diag(c) + Z * Z^T (c is a p-dimensional vector
+    and Z a p * k matrix).
     It doesn't build the matrix Omega and is much faster than computing
     the Cholesky decomposition of Omega when p is large (and k small).
     """

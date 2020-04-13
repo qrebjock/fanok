@@ -6,7 +6,7 @@ from fanok.sdp._low_rank import _sdp_low_rank
 import cvxpy as cp
 
 
-def sdp_equi(Sigma: np.ndarray, tol: float = 0, array: bool = True):
+def sdp_equi(Sigma: np.ndarray, array: bool = True):
     """
     Returns the minimum eigenvalue of 2 * Sigma.
     This is a cheap way to find a feasible solution to the SDP
@@ -89,27 +89,19 @@ def sdp_low_rank(
     )
 
 
-def solve_sdp(
-    Sigma: np.ndarray,
-    mode: str = "equi",
-    Sigma_approx: np.ndarray = None,
-    return_diag: bool = False,
+def solve_full_sdp(
+    Sigma: np.ndarray, mode: str = "equi", return_diag: bool = False,
 ):
+    """
+    """
     if mode == "equi":
-        res = sdp_equi(Sigma)
+        res = sdp_equi(Sigma, array=True)
     elif mode == "sdp":
         res = sdp_full(Sigma)
-    elif mode == "asdp":
-        if Sigma_approx is None:
-            raise ValueError(
-                "Please provide an approximation of the matrix Sigma with the 'cap_sigma_approx' parameter"
-                "when setting the mode to 'asdp'"
-            )
-        res = sdp_full_approx(Sigma, Sigma_approx)
     elif mode == "zero":
         res = np.zeros(Sigma.shape[0])
     else:
-        raise ValueError(f"Mode can be either 'equi', 'sdp' or 'asdp'. Found {mode}")
+        raise ValueError(f"Mode can be either 'equi', 'sdp' or 'zero'. Found {mode}")
 
     if return_diag:
         return np.diag(res)
