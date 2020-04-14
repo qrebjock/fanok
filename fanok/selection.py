@@ -5,7 +5,7 @@ from sklearn.utils.validation import check_is_fitted
 from sklearn.base import BaseEstimator
 from sklearn.feature_selection.base import SelectorMixin
 
-from fanok.scores import selection_fdr, selection_power
+from fanok.scores import selection_fdp, selection_power
 
 
 def adaptive_significance_threshold(w: np.ndarray, q: float, offset: float = 0):
@@ -66,17 +66,17 @@ class BaseKnockoffsSelector(BaseEstimator, SelectorMixin):
         # check_is_fitted(self, 'mask_')
         self.fit(X, y)
         return (
-            selection_fdr(self.mask_, ground_truth),
+            selection_fdp(self.mask_, ground_truth),
             selection_power(self.mask_, ground_truth),
         )
 
     def scores(self, X, y, ground_truth, repeats=10):
-        fdrs, powers = [], []
+        fdps, powers = [], []
         for _ in range(repeats):
-            fdr, power = self.score(X, y, ground_truth)
-            fdrs.append(fdr)
+            fdp, power = self.score(X, y, ground_truth)
+            fdps.append(fdp)
             powers.append(power)
-        return fdrs, powers
+        return fdps, powers
 
 
 class KnockoffsSelector(BaseKnockoffsSelector):

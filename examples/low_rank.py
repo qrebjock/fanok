@@ -16,5 +16,5 @@ statistics = EstimatorKnockoffStatistics()
 selector = SimpleKnockoffsSelector(knockoffs, statistics, alpha=0.2, offset=1)
 selector.fit(X, y)
 
-fdr, power = selector.score(X, y, coef)
-print(f"FDR: {fdr}, Power: {power}")
+fdp, power = selector.score(X, y, coef)
+print(f"FDP: {fdp}, Power: {power}")

@@ -1,139 +1,184 @@
 import numpy as np
 
-from scipy.linalg import eigh, inv, null_space
+from scipy.linalg import eigh, inv, null_space, solve
 
 from .base import KnockoffsGenerator
 from fanok.sdp import solve_full_sdp
 
 
-def compute_mat_a(inv_cap_sigma: np.ndarray, s: np.ndarray):
-    mat_s = np.diag(s)
-    return 2 * mat_s - mat_s @ inv_cap_sigma @ mat_s
-
-
-def compute_mat_c(Sigma: np.ndarray):
-    s, v = eigh(Sigma)
-    s = np.clip(s, a_min=0, a_max=None)  # Correcting computation errors
-    return np.diag(np.sqrt(s)) @ v.T
-
-
-def compute_mat_u_tilde(x: np.ndarray):
-    return null_space(x.T)[:, : x.shape[1]]
-
-
-def fixed_x_parameters(x: np.ndarray, mode: str = "equi"):
-    Sigma = x.T @ x
-    inv_cap_sigma = inv(Sigma)
-    s = solve_full_sdp(Sigma, mode=mode)
-    mat_a = compute_mat_a(inv_cap_sigma, s)
-    mat_c = compute_mat_c(mat_a)
-    mat_u_tilde = compute_mat_u_tilde(x)
-
-    return inv_cap_sigma @ np.diag(s), mat_u_tilde @ mat_c
-
-
-def fixed_x_natural_knockoffs_from_parameters(
-    x: np.ndarray, a: np.ndarray, b: np.ndarray
+def fixed_knockoffs_parameters(
+    X: np.ndarray, sdp_mode: str = "equi", assume_centered: bool = True
 ):
-    return x @ (np.identity(x.shape[1]) - a) + b
+    """
+    Computes the parameters allowing the create
+    fixed knockoffs from the samples.
+    """
+    # TODO: not centered case
+    Sigma = X.T @ X
+    s = solve_full_sdp(Sigma, mode=sdp_mode)
+    iS_t_s = solve(Sigma, np.diag(s))
+
+    A = 2 * np.diag(s) - s[:, None] * iS_t_s
+
+    eig, V = eigh(A)
+    eig = np.clip(eig, a_min=0, a_max=None)  # Correcting computation errors
+    C = np.diag(np.sqrt(eig)) @ V.T
+
+    U_tilde = null_space(X.T)[:, : X.shape[1]]
+
+    return np.eye(iS_t_s.shape[0]) - iS_t_s, U_tilde @ C
 
 
-def fixed_x_natural_knockoffs(
-    x: np.ndarray, mode: str = "equi", a: np.ndarray = None, b: np.ndarray = None
+def sample_fixed_knockoffs_from_parameters(X: np.ndarray, A: np.ndarray, B: np.ndarray):
+    """
+    Sample fixed knockoffs from the matrix parameters A and B.
+    """
+    return X @ A + B
+
+
+def natural_fixed_knockoffs(
+    X: np.ndarray, A: np.ndarray = None, B: np.ndarray = None, sdp_mode: str = "equi"
 ):
-    if a is None or b is None:
-        a, b = fixed_x_parameters(x, mode=mode)
-    return fixed_x_natural_knockoffs_from_parameters(x, a, b)
+    """
+    Sample natural fixed knockoffs (case where n >= 2p).
+    """
+    if A is None or B is None:
+        A, B = fixed_knockoffs_parameters(X, sdp_mode=sdp_mode)
+
+    return sample_fixed_knockoffs_from_parameters(X, A, B)
 
 
-def fixed_x_extend_x(x: np.ndarray):
-    n, p = x.shape[0], x.shape[1]
-    zeros = np.zeros((2 * p - n, p))
-    return np.vstack((x, zeros))
+def fixed_knockoffs_extend_samples(
+    X: np.ndarray, y: np.ndarray = None, noise_estimate: float = None
+):
+    """
+    Extends the samples X and/or y so that the feature dimension
+    matches the sample size.
+    """
+    n, p = X.shape[0], X.shape[1]
+
+    if X is not None:
+        zeros = np.zeros((2 * p - n, p))
+        X = np.vstack((X, zeros))
+
+    if y is not None:
+        if noise_estimate is None:
+            raise ValueError(
+                f"When 2p > n you need A noise estimation in order to extend the response vector y"
+            )
+        y = np.concatenate((y, np.random.normal(0, noise_estimate, size=2 * p - n)))
+
+    return X, y
 
 
-def fixed_x_extend_y(y: np.ndarray, noise_estimate: float, size: int):
-    return np.concatenate((y, np.random.normal(0, noise_estimate, size=size)))
+def extended_fixed_knockoffs(
+    X: np.ndarray,
+    y: np.ndarray = None,
+    A: np.ndarray = None,
+    B: np.ndarray = None,
+    noise_estimate: float = None,
+    sdp_mode: str = "equi",
+):
+    """
+    Create fixed knockoffs in the regime where 2p > n >= p.
+    """
+    n, p = X.shape[0], X.shape[1]
+    if n > 2 * p:
+        return natural_fixed_knockoffs(X, A, B, sdp_mode=sdp_mode)
+    elif p > n:
+        raise ValueError(
+            "Can't generated fixed knockoffs when the feature dimension is greater than the sample size"
+        )
 
+    # Augment X to get the right dimension
+    X, y = fixed_knockoffs_extend_samples(X, y, noise_estimate=noise_estimate)
+    X_tilde = natural_fixed_knockoffs(X, A, B, sdp_mode=sdp_mode)
 
-def fixed_x_extended_knockoffs(x: np.ndarray, mode: str = "equi"):
-    return fixed_x_natural_knockoffs(fixed_x_extend_x(x), mode=mode)
+    return X, X_tilde, y
 
 
 def fixed_knockoffs(
-    x: np.ndarray,
-    mode: str = "equi",
+    X: np.ndarray,
     y: np.ndarray = None,
+    sdp_mode: str = "equi",
     noise_estimate: float = None,
     stack: bool = True,
-    a: np.ndarray = None,
-    b: np.ndarray = None,
+    A: np.ndarray = None,
+    B: np.ndarray = None,
 ):
-    n, p = x.shape[0], x.shape[1]
+    """
+    Fixed X_tilde work better in the case where n >= 2p.
+    They may be partially extended to the case where n >= p.
+    In the high-dimension regime, use Gaussian X_tilde instead.
+    """
+    n, p = X.shape[0], X.shape[1]
 
     if p > n:
         raise ValueError(
             f"The number of features cannot be larger than the "
-            f"number of data points. Found x with shape {(n, p)}"
+            f"number of data points. Found X with shape {(n, p)}"
         )
 
     if n >= 2 * p:
-        knockoffs = fixed_x_natural_knockoffs(x, mode=mode, a=a, b=b)
+        X_tilde = natural_fixed_knockoffs(X, A, B, sdp_mode=sdp_mode)
     else:
-        x = fixed_x_extend_x(x)
-        knockoffs = fixed_x_extended_knockoffs(x, mode=mode)
-        if y is not None:
-            if noise_estimate is None:
-                raise ValueError(
-                    f"When 2p > n you need a noise estimation in order to extend the response vector y"
-                )
-            else:
-                y = fixed_x_extend_y(y, noise_estimate, 2 * p - n)
+        X, X_tilde, y = extended_fixed_knockoffs(
+            X, y, A, B, noise_estimate=noise_estimate, sdp_mode=sdp_mode
+        )
     if stack:
-        knockoffs = np.hstack((x, knockoffs))
+        X_tilde = np.hstack((X, X_tilde))
     if y is None:
-        return knockoffs
+        return X_tilde
     else:
-        return knockoffs, y
+        return X_tilde, y
 
 
-def are_fixed_knockoffs_valid(x: np.ndarray, x_tilde: np.ndarray):
-    Sigma = x.T @ x
-    cap_sigma_tilde = x_tilde.T @ x_tilde
+def are_fixed_knockoffs_valid(X: np.ndarray, X_tilde: np.ndarray, tol: float = -1e-12):
+    """
+    Checks if knockoffs X_tilde are valid for the samples X.
+    """
+    Sigma = X.T @ X
+    Sigma_tilde = X_tilde.T @ X_tilde
 
-    difference = Sigma - x.T @ x_tilde
+    difference = Sigma - X.T @ X_tilde
     diagonal = np.diagonal(difference)
 
     return (
-        np.allclose(Sigma, cap_sigma_tilde)
+        np.allclose(Sigma, Sigma_tilde)
         and np.allclose(difference - np.diag(diagonal), 0)
-        and (diagonal >= -1e-12).all()
+        and np.all(diagonal >= tol)
     )
 
 
 class FixedKnockoffs(KnockoffsGenerator):
+    """
+    Abstraction of fixed knockoffs.
+    In high-dimension (more features than samples),
+    you should use Gaussian knockoffs instead.
+    """
+
     def __init__(
-        self, mode: str = "equi", noise_estimate: float = None, stack: bool = False
+        self, sdp_mode: str = "equi", noise_estimate: float = None, stack: bool = False
     ):
         super().__init__()
-        self.mode = mode
+        self.sdp_mode = sdp_mode
         self.noise_estimate = noise_estimate
         self.stack = stack
 
-        self.a = None
-        self.b = None
+        self.A_ = None
+        self.B_ = None
 
-    def fit(self, x: np.ndarray, y: np.ndarray = None):
-        self.a, self.b = fixed_x_parameters(x, mode=self.mode)
+    def fit(self, X: np.ndarray, y: np.ndarray = None):
+        self.A_, self.B_ = fixed_knockoffs_parameters(X, sdp_mode=self.sdp_mode)
         return self
 
-    def transform(self, x: np.ndarray, y: np.ndarray = None):
+    def transform(self, X: np.ndarray, y: np.ndarray = None):
         return fixed_knockoffs(
-            x,
-            mode=self.mode,
+            X,
+            sdp_mode=self.sdp_mode,
             y=y,
             noise_estimate=self.noise_estimate,
             stack=self.stack,
-            a=self.a,
-            b=self.b,
+            A=self.A_,
+            B=self.B_,
         )

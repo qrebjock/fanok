@@ -1,15 +1,15 @@
 from sklearn.datasets import make_regression
 
 from fanok import (
-    GaussianKnockoffs,
+    FixedKnockoffs,
     SimpleKnockoffsSelector,
 )
 from fanok.statistics import EstimatorKnockoffStatistics
 
 
-X, y, coef = make_regression(n_samples=100, n_features=150, n_informative=20, coef=True)
+X, y, coef = make_regression(n_samples=200, n_features=100, n_informative=20, coef=True)
 
-knockoffs = GaussianKnockoffs()
+knockoffs = FixedKnockoffs()
 statistics = EstimatorKnockoffStatistics()
 selector = SimpleKnockoffsSelector(knockoffs, statistics, alpha=0.2, offset=1)
 selector.fit(X, y)
