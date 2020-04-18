@@ -7,15 +7,10 @@ cimport numpy as np
 from libc.math cimport sqrt
 from libc.math cimport abs as cabs
 
-FLOAT_NUMPY_TYPE_MAP = {
-    4 : np.float32,
-    8 : np.float64
-}
-NP_DOUBLE_D_TYPE = FLOAT_NUMPY_TYPE_MAP[sizeof(double)]
-
 from scipy.linalg.cython_blas cimport dscal, ddot, dtrsv
 
-from fanok.utils._cholesky cimport cholupdate, choldowndate
+from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
+from fanok.utils._cholesky cimport __cholupdate, __choldowndate
 
 
 @cython.cdivision(True)
@@ -41,8 +36,8 @@ cdef __full_rank(
         double[::1] choldate_buffer = np.zeros(p, dtype=NP_DOUBLE_D_TYPE)
         double zero = 0
         double beta, xi, c, sj, delta
-        char* up = 'L'
-        char* trans = 'N'
+        char* low = 'L'
+        char* no_trans = 'N'
         char* diag = 'N'
 
     for n_iter in range(max_iterations):
@@ -56,7 +51,7 @@ cdef __full_rank(
                 y_tilde[j] = 0
 
                 # Solve triangular
-                dtrsv(up, trans, diag, &p, &R[0, 0], &p, &y_tilde[0], &inc_1)
+                dtrsv(low, no_trans, diag, &p, &R[0, 0], &p, &y_tilde[0], &inc_1)
 
                 beta = 4 * ddot(&p, &y_tilde[0], &inc_1, &y_tilde[0], &inc_1)
                 xi = 2 * Sigma[j, j] - s[j]
@@ -68,10 +63,9 @@ cdef __full_rank(
             if delta != 0:
                 choldate_buffer[j] = sqrt(cabs(delta))
                 if delta > 0:
-                    cholupdate(p, R, choldate_buffer)
+                    __cholupdate(p, R, choldate_buffer)
                 else:
-                    if not choldowndate(p, R, choldate_buffer):
-                        print(n_iter)
+                    if not __choldowndate(p, R, choldate_buffer):
                         return s, objectives
 
                 # the buffer was overwritten, nullify it

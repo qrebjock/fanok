@@ -5,14 +5,10 @@ cimport numpy as np
 
 from libc.math cimport abs
 
-FLOAT_NUMPY_TYPE_MAP = {
-    4 : np.float32,
-    8 : np.float64
-}
-NP_DOUBLE_D_TYPE = FLOAT_NUMPY_TYPE_MAP[sizeof(double)]
-
 from scipy.linalg.cython_blas cimport dger, dsymv, ddot, dcopy
 from scipy.linalg.cython_lapack cimport dgesv
+
+from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
 
 
 @cython.boundscheck(False)
