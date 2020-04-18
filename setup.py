@@ -24,7 +24,11 @@ setup(
     ],
     ext_modules=cythonize(
         [
+            Extension("fanok.utils._dtypes", ["fanok/utils/_dtypes.pyx"]),
+            Extension("fanok.utils._cholesky", ["fanok/utils/_cholesky.pyx"]),
+            Extension("fanok.utils._qr", ["fanok/utils/_qr.pyx"]),
             Extension("fanok.sdp._low_rank", ["fanok/sdp/_low_rank.pyx"]),
+            Extension("fanok.sdp._qr_low_rank", ["fanok/sdp/_qr_low_rank.pyx"]),
             Extension("fanok.sdp._full_rank", ["fanok/sdp/_full_rank.pyx"]),
             Extension(
                 "fanok.factor_model._shrinkage",
@@ -32,10 +36,9 @@ setup(
                 # extra_compile_args=["-fopenmp"],
                 # extra_link_args=["-fopenmp"],
             ),
-            Extension("fanok.utils._cholesky", ["fanok/utils/_cholesky.pyx"]),
         ],
         compiler_directives={"language_level": "3"},
-        annotate=False,
+        annotate=True,
     ),
     include_dirs=[np.get_include()],
 )
