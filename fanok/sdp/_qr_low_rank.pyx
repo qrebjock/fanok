@@ -20,7 +20,7 @@ from fanok.utils._qr cimport qr_update
 cdef sdp_rank_k(
     int p, int k,
     double[::1] d, double[:, ::1] U,
-    double[::1] diag_Sigma, double[::1, :] Q, double[:, ::1] R,
+    double[::1] ztz, double[::1] diag_Sigma, double[::1, :] Q, double[:, ::1] R,
     int max_iterations, double lam, double mu, double tol, double lam_min
 ):
     objectives = [0]
@@ -31,10 +31,12 @@ cdef sdp_rank_k(
 
         double kappa = 0
         double[::1] qr_work = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
+        double[::1] Qz = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
         double[::1] Rz = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
-        double[::1] y = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
+        double[::1] QTz = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
         double* z = NULL
-        double b = 0, c = 0
+        double ztAz = 0, ztiAz = 0
+        double b = 0, c = 0, r = 0, f = 0, q = 0, sj = 0
 
         double zero = 0, one = 1, minus_one = -1
         int inc_1 = 1
@@ -47,37 +49,41 @@ cdef sdp_rank_k(
         prev_s_sum = current_s_sum
         current_s_sum = 0
         for j in range(p):
-            # z = U[j, :]
             z = &U[j, 0]
+            kappa = 1 / (s[j] - 2 * d[j])
 
-            kappa = 2 / (s[j] - 2 * d[j])
-            qr_update(k, Q, R, &kappa, z, z, &qr_work[0])
-
+            # Qz = Q @ z
+            dgemv(no_trans, &k, &k, &one, &Q[0, 0], &k, z, &inc_1, &zero, &Qz[0], &inc_1)
             # Rz = R @ z
             dcopy(&k, z, &inc_1, &Rz[0], &inc_1)
             dtrmv(low, trans, not_unit, &k, &R[0, 0], &k, &Rz[0], &inc_1)
 
-            # y = Q @ R @ z
-            dgemv(no_trans, &k, &k, &one, &Q[0, 0], &k, &Rz[0], &inc_1, &zero, &y[0], &inc_1)
-            # y = Q @ R @ z - z
-            daxpy(&k, &minus_one, z, &inc_1, &y[0], &inc_1)
+            ztAz = ddot(&k, &Qz[0], &inc_1, &Rz[0], &inc_1)
 
-            # b = z @ y
-            b = ddot(&k, z, &inc_1, &y[0], &inc_1)
-
-            # Rz = Rz - Q.T @ z
-            dgemv(trans, &k, &k, &minus_one, &Q[0, 0], &k, z, &inc_1, &one, &Rz[0], &inc_1)
-
+            # QTz = Q.T @ z
+            dgemv(trans, &k, &k, &one, &Q[0, 0], &k, z, &inc_1, &zero, &QTz[0], &inc_1)
             # Solve triangular
-            dtrsv(low, trans, not_unit, &k, &R[0, 0], &k, &Rz[0], &inc_1)
+            dtrsv(low, trans, not_unit, &k, &R[0, 0], &k, &QTz[0], &inc_1)
+            ztiAz = ddot(&k, &QTz[0], &inc_1, z, &inc_1)
 
-            # c = y @ Rz
-            c = ddot(&k, &y[0], &inc_1, &Rz[0], &inc_1)
+            b = (ztAz - ztz[j]) / 2 + kappa * ztz[j]**2
+            c = (
+                ztAz / 4
+                + ztiAz * (kappa * ztz[j] * (kappa * ztz[j] - 1) + 0.25)
+                + ztz[j] * (kappa * ztz[j] - 0.5)
+            )
+            r = ztz[j] / 2 - ztiAz / 2 + (kappa * ztz[j]) * ztiAz
+            f = 2 * kappa / (1 + 2 * kappa * ztiAz)
+            q = c - r * r * f
+            sj = max(2 * diag_Sigma[j] - 4 * b - lam + 8 * q, 0)
 
-            s[j] = max(2 * diag_Sigma[j] - 2 * b - lam + 2 * c, 0)
+            # if not(1e-9 < abs(ztAz) < 1e9) or not(1e-9 < abs(ztiAz) < 1e9):
+            #     return s, objectives
 
-            kappa = 2 / (2 * d[j] - s[j])
-            qr_update(k, Q, R, &kappa, z, z, &qr_work[0])
+            if sj != s[j]:
+                kappa = 2 * (sj - s[j]) / ((2 * d[j] - s[j]) * (2 * d[j] - sj))
+                s[j] = sj
+                qr_update(k, Q, R, &kappa, z, z, &qr_work[0])
 
             current_s_sum += s[j]
 
@@ -127,7 +133,8 @@ def _sdp_low_rank(
     if singular_values is not None:
         U = U * singular_values
 
-    diag_Sigma = d + np.sum(U * U, axis=1)
+    ztz = np.sum(U * U, axis=1)
+    diag_Sigma = d + ztz
     Q, R = qr(np.eye(k) + (U.T / d) @ U)
 
     if U.ndim == 1:
@@ -137,7 +144,7 @@ def _sdp_low_rank(
         pass
     elif U.ndim == 2:
         s, objectives = sdp_rank_k(
-            p, k, d, U, diag_Sigma, Q, R, max_iterations, lam, mu, tol, lam_min
+            p, k, d, U, ztz, diag_Sigma, Q, R, max_iterations, lam, mu, tol, lam_min
         )
 
     if return_objectives:
