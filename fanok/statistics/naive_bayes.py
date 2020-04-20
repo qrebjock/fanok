@@ -1,41 +1,40 @@
 import numpy as np
 
-from fanok.statistics import AntisymmetricKnockoffStatistics
+from sklearn.base import BaseEstimator
 
 
-class L1MultinomialNBStatistics(AntisymmetricKnockoffStatistics):
+class L1MultinomialNBStatistics(BaseEstimator):
     def __init__(
-        self,
-        antisymmetry="difference",
-        remove_min: bool = True,
-        normalize: bool = False,
+        self, remove_min: bool = True, normalize: bool = False,
     ):
-        super().__init__(antisymmetry=antisymmetry)
+        super().__init__()
         self.remove_min = remove_min
         self.normalize = normalize
 
-    def evaluate_antisymmetric(self, X, X_tilde, y):
+    def fit(self, X, y):
         if self.remove_min:
             X = X - np.min(X)
         if self.normalize:
             X = (X.T / np.linalg.norm(X, axis=1)).T
-        x_p = X[y == 1]
+
+        X_p = X[y == 1]
         X_m = X[y == 0]
-        f_p = np.sum(x_p, axis=0)
+        f_p = np.sum(X_p, axis=0)
         f_m = np.sum(X_m, axis=0)
 
         q1 = (f_p + f_m) * np.log(f_p + f_m)
         alpha = np.sum(f_p) / np.sum(f_p + f_m)
         q2 = f_p * np.log(f_p / alpha) + f_m * np.log(f_m / (1 - alpha))
 
-        return q2 - q1
+        self.coef_ = q2 - q1
+        return self
 
 
-class L1GaussianNBStatistics(AntisymmetricKnockoffStatistics):
-    def __init__(self, antisymmetry="difference"):
-        super().__init__(antisymmetry=antisymmetry)
+class L1GaussianNBStatistics(BaseEstimator):
+    def __init__(self):
+        super().__init__()
 
-    def evaluate_antisymmetric(self, X, y):
+    def fit(self, X, y):
         X_p = X[y == 1]
         X_m = X[y == 0]
 
@@ -60,15 +59,16 @@ class L1GaussianNBStatistics(AntisymmetricKnockoffStatistics):
             n_p + n_m
         ) * np.log(std)
 
-        return q1 - q2
+        self.coef_ = q1 - q2
+        return self
 
 
-class L1BernoulliNBStatistics(AntisymmetricKnockoffStatistics):
-    def __init__(self, antisymmetry="difference", remove_min: bool = True):
-        super().__init__(antisymmetry=antisymmetry)
+class L1BernoulliNBEstimator(BaseEstimator):
+    def __init__(self, remove_min: bool = True):
+        super().__init__()
         self.remove_min = remove_min
 
-    def evaluate_antisymmetric(self, X, y):
+    def fit(self, X, y):
         if self.remove_min:
             X = X - np.min(X)
 
@@ -92,4 +92,5 @@ class L1BernoulliNBStatistics(AntisymmetricKnockoffStatistics):
 
         q2 = (f_p + f_m) * np.log(theta) + (n_p + n_m - f_p - f_m) * np.log(1 - theta)
 
-        return q1 - q2
+        self.coef_ = q1 - q2
+        return self
