@@ -5,7 +5,4 @@ from .generation import (
     LowRankGaussianKnockoffs,
 )
 from .factor_model import RandomizedLowRankFactorModel
-from .selection import (
-    KnockoffsSelector,
-    SimpleKnockoffsSelector,
-)
+from .selection import KnockoffSelector

@@ -51,7 +51,7 @@ def knockoffs_selection_mask(
     return w >= threshold
 
 
-class BaseKnockoffsSelector(BaseEstimator, SelectorMixin):
+class BaseKnockoffSelector(BaseEstimator, SelectorMixin):
     def __init__(self):
         pass
 
@@ -79,56 +79,32 @@ class BaseKnockoffsSelector(BaseEstimator, SelectorMixin):
         return fdps, powers
 
 
-class KnockoffsSelector(BaseKnockoffsSelector):
-    """
-
-    """
-
+class KnockoffSelector(BaseKnockoffSelector):
     def __init__(
         self,
-        knockoffs_generator,
-        stats_fun,
+        knockoffs,
+        statistics,
         alpha: float = 0.1,
         offset: float = 0,
         fit_generator: bool = True,
     ):
-        super().__init__()
-        self.knockoffs_generator = knockoffs_generator
-        self.stats_fun = stats_fun
+        self.knockoffs = knockoffs
+        self.statistics = statistics
         self.alpha = alpha
         self.offset = offset
         self.fit_generator = fit_generator
 
-    def fit(self, X, y):
-        raise NotImplementedError
-
-
-class SimpleKnockoffsSelector(KnockoffsSelector):
-    def __init__(
-        self,
-        knockoffs_generator,
-        stats_fun,
-        alpha: float = 0.1,
-        offset: float = 0,
-        fit_generator: bool = True,
-    ):
-        super().__init__(
-            knockoffs_generator,
-            stats_fun,
-            alpha=alpha,
-            offset=offset,
-            fit_generator=fit_generator,
-        )
+        super().__init__()
 
     def fit(self, X, y):
         if self.fit_generator:
-            self.knockoffs_generator.fit(X)
+            self.knockoffs.fit(X)
 
         self.mask_ = knockoffs_selection_mask(
             X,
             y,
-            self.knockoffs_generator,
-            self.stats_fun,
+            self.knockoffs,
+            self.statistics,
             q=self.alpha,
             threshold_offset=self.offset,
         )
