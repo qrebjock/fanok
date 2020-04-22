@@ -4,13 +4,13 @@ from fanok import (
     FixedKnockoffs,
     KnockoffSelector,
 )
-from fanok.statistics import EstimatorKnockoffStatistics
+from fanok.statistics import EstimatorStatistics
 
 
 X, y, coef = make_regression(n_samples=200, n_features=100, n_informative=20, coef=True)
 
 knockoffs = FixedKnockoffs()
-statistics = EstimatorKnockoffStatistics()
+statistics = EstimatorStatistics()
 selector = KnockoffSelector(knockoffs, statistics, alpha=0.2, offset=1)
 selector.fit(X, y)
 

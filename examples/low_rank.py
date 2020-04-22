@@ -5,14 +5,14 @@ from fanok import (
     LowRankGaussianKnockoffs,
     KnockoffSelector,
 )
-from fanok.statistics import EstimatorKnockoffStatistics
+from fanok.statistics import EstimatorStatistics
 
 
 X, y, coef = make_regression(n_samples=100, n_features=150, n_informative=20, coef=True)
 
 factor_model = RandomizedLowRankFactorModel(rank=20)
 knockoffs = LowRankGaussianKnockoffs(factor_model)
-statistics = EstimatorKnockoffStatistics()
+statistics = EstimatorStatistics()
 selector = KnockoffSelector(knockoffs, statistics, alpha=0.2, offset=1)
 selector.fit(X, y)
 

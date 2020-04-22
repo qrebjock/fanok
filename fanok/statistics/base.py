@@ -55,7 +55,7 @@ def antisymmetric_knockoff_statistics(
         )
 
 
-class AntisymmetricKnockoffStatistics(KnockoffStatistics):
+class AntisymmetricStatistics(KnockoffStatistics):
     """
     Flip-sign knockoff statistics computed in two steps,
     through and antisymmetric function.
@@ -74,7 +74,7 @@ class AntisymmetricKnockoffStatistics(KnockoffStatistics):
         pass
 
 
-class EstimatorKnockoffStatistics(AntisymmetricKnockoffStatistics):
+class EstimatorStatistics(AntisymmetricStatistics):
     """
     Flip-sign knockoff statistics
     """
