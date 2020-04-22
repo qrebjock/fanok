@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="fanok",
-    version="0.0.1",
+    version="0.0.2",
     packages=find_packages(),
     license="MIT",
     python_requires=">=3.5.0",
@@ -24,7 +24,7 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT",
+        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
     ext_modules=cythonize(

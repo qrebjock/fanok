@@ -1,0 +1,9 @@
+### Include
+
+recursive-include fanok *.py
+recursive-include fanok *.pyx
+recursive-include fanok *.pxd
+
+### Exclude
+
+recursive-exclude fanok *.c
