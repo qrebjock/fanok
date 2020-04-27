@@ -94,10 +94,14 @@ def sdp_low_rank(
     Solves the low-rank SDP with coordinate ascent.
     Wrapper of the efficient Cython implementation.
     """
-    # cor = cov_to_cor(Sigma)
-    # ztz = np.sum(U * U, axis=1)
-    # diag_Sigma = d + ztz
-    return _sdp_low_rank(
+    # TODO: Handle singular values
+    ztz = np.sum(U * U, axis=1)
+    diag_Sigma = d + ztz
+    inv_sqrt = 1 / np.sqrt(diag_Sigma)
+    d = d / diag_Sigma
+    U = inv_sqrt[:, None] * U
+
+    s = _sdp_low_rank(
         d,
         U,
         singular_values=singular_values,
@@ -107,6 +111,8 @@ def sdp_low_rank(
         tol=tol,
         return_objectives=return_objectives,
     )
+
+    return s * diag_Sigma
 
 
 def solve_full_sdp(

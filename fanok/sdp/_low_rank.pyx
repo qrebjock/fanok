@@ -11,6 +11,10 @@ from scipy.linalg.cython_lapack cimport dgesv
 from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
 
 
+cdef double _clip(double x, double amin, double amax) nogil:
+    return min(max(x, amin), amax)
+
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
@@ -50,8 +54,7 @@ cdef sdp_rank_k(
             z = 2 * (d[j] + u_diag_term[j]) - lam - c
             # if z > 1:
             #     z = 1
-            if z < 0:
-                z = 0
+            z = _clip(z, 0, 1)
             current_s_sum += z
             s[j] = z
 
