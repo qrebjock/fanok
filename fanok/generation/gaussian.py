@@ -32,9 +32,10 @@ def gaussian_knockoffs_sampling_parameters(
     mu: np.ndarray = None,
     Sigma: np.ndarray = None,
     sdp_mode: str = "sdp",
+    sdp_kwargs: dict = None,
     covariance_mode: str = "wolf",
     assume_centered: bool = False,
-    cov_tol: float = 1e-6,
+    cov_tol: float = 1e-10,
 ):
     if (mu is None or Sigma is None) and X is None:
         raise ValueError(
@@ -46,8 +47,10 @@ def gaussian_knockoffs_sampling_parameters(
         Sigma = estimate_covariance(
             X, mode=covariance_mode, assume_centered=assume_centered
         )
+    if sdp_kwargs is None:
+        sdp_kwargs = {}
 
-    S = solve_full_sdp(Sigma, mode=sdp_mode, return_diag=True)
+    S = solve_full_sdp(Sigma, mode=sdp_mode, return_diag=True, **sdp_kwargs)
     mul = lstsq(Sigma, S)[0]
 
     mu_tilde = X - (X - mu) @ mul
@@ -91,11 +94,13 @@ class GaussianKnockoffs(KnockoffsGenerator):
     def __init__(
         self,
         sdp_mode: str = "sdp",
+        sdp_kwargs: dict = None,
         covariance_mode: str = "wolf",
         assume_centered: bool = False,
     ):
         super().__init__()
         self.sdp_mode = sdp_mode
+        self.sdp_kwargs = {} if sdp_kwargs is None else sdp_kwargs
         self.covariance_mode = covariance_mode
         self.assume_centered = assume_centered
 
@@ -107,6 +112,7 @@ class GaussianKnockoffs(KnockoffsGenerator):
             mu=mu,
             Sigma=Sigma,
             sdp_mode=self.sdp_mode,
+            sdp_kwargs=self.sdp_kwargs,
             covariance_mode=self.covariance_mode,
             assume_centered=self.assume_centered,
         )

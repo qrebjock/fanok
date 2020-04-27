@@ -13,6 +13,10 @@ from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
 from fanok.utils._cholesky cimport __cholupdate, __choldowndate
 
 
+cdef double _clip(double x, double amin, double amax) nogil:
+    return min(max(x, amin), amax)
+
+
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -57,7 +61,7 @@ cdef __full_rank(
                 xi = 2 * Sigma[j, j] - s[j]
                 c = beta * xi / (xi + beta)
 
-                sj = max(2 * Sigma[j, j] - c - lam, 0)
+                sj = _clip(2 * Sigma[j, j] - c - lam, 0, 1)
                 delta = s[j] - sj
 
             if delta != 0:
@@ -115,6 +119,10 @@ def _full_rank(
     if mu is None:
         mu = 0.8
     if max_iterations is None:
+        if tol < 0:
+            raise ValueError(
+                f"Can't automatically set the maximum number of iterations if the tolerance of non positive"
+            )
         max_iterations = np.ceil(np.log(p * lam / tol) / np.log(1 / mu)).astype(int)
 
     s, objectives = __full_rank(p, Sigma, R, max_iterations, lam, mu, tol)

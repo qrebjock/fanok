@@ -13,6 +13,10 @@ from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
 from fanok.utils._qr cimport qr_update
 
 
+cdef double _clip(double x, double amin, double amax) nogil:
+    return min(max(x, amin), amax)
+
+
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -75,7 +79,7 @@ cdef sdp_rank_k(
             r = ztz[j] / 2 - ztiAz / 2 + (kappa * ztz[j]) * ztiAz
             f = 2 * kappa / (1 + 2 * kappa * ztiAz)
             q = c - r * r * f
-            sj = max(2 * diag_Sigma[j] - 4 * b - lam + 8 * q, 0)
+            sj = _clip(2 * diag_Sigma[j] - 4 * b - lam + 8 * q, 0, 1)
 
             # if not(1e-9 < abs(ztAz) < 1e9) or not(1e-9 < abs(ztiAz) < 1e9):
             #     return s, objectives

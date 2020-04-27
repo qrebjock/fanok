@@ -14,6 +14,7 @@ def adaptive_significance_threshold(w: np.ndarray, q: float, offset: float = 0):
     of the original and the knockoffs features.
     """
     w_set = np.setdiff1d(np.abs(w), 0)
+    # w_set = np.union1d(np.abs(w), 0)
     w = np.broadcast_to(w, (len(w_set), len(w))).T
 
     numerator = np.sum(w <= -w_set, axis=0) + offset
