@@ -33,7 +33,6 @@ setup(
             Extension("fanok.utils._cholesky", ["fanok/utils/_cholesky.pyx"]),
             Extension("fanok.utils._qr", ["fanok/utils/_qr.pyx"]),
             Extension("fanok.sdp._low_rank", ["fanok/sdp/_low_rank.pyx"]),
-            Extension("fanok.sdp._qr_low_rank", ["fanok/sdp/_qr_low_rank.pyx"]),
             Extension("fanok.sdp._full_rank", ["fanok/sdp/_full_rank.pyx"]),
             Extension(
                 "fanok.factor_model._shrinkage",

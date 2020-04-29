@@ -3,7 +3,12 @@ from typing import Union
 import numpy as np
 from sklearn.utils.validation import check_is_fitted
 from sklearn.base import BaseEstimator
-from sklearn.feature_selection.base import SelectorMixin
+
+try:
+    # In Scikit-Learn 0.23 SelectorMixin is moved to sklearn.feature_selection
+    from sklearn.feature_selection import SelectorMixin
+except ImportError:
+    from sklearn.feature_selection.base import SelectorMixin
 
 from fanok.scores import selection_fdp, selection_power
 
@@ -12,6 +17,11 @@ def adaptive_significance_threshold(w: np.ndarray, q: float, offset: float = 0):
     """
     Compute the data-dependent threshold \tau from the statistics
     of the original and the knockoffs features.
+
+    :param w: Statistics satisfying the flip-sign property.
+    :param q: Desired FDR
+    :param offset: Offset added to the numerator of the threshold
+    expression. Knockoff+ correspond to offset=1. Defaults to 0.
     """
     w_set = np.setdiff1d(np.abs(w), 0)
     # w_set = np.union1d(np.abs(w), 0)
@@ -37,6 +47,10 @@ def knockoffs_selection_mask(
     q: float = 0.1,
     threshold_offset: float = 0,
 ):
+    """
+    Computes the knockoff selection mask from the data samples,
+    the knockoffs, and the statistics.
+    """
     if callable(knockoffs):
         X_tilde = knockoffs(X)
     else:
@@ -53,10 +67,19 @@ def knockoffs_selection_mask(
 
 
 class BaseKnockoffSelector(BaseEstimator, SelectorMixin):
+    """
+    Base class for knockoff selectors.
+    Must implement the method fit.
+    """
+
     def __init__(self):
         pass
 
     def fit(self, X, y):
+        """
+        :param X: Data samples
+        :param y: Target vector
+        """
         raise NotImplementedError
 
     def _get_support_mask(self):
@@ -64,7 +87,14 @@ class BaseKnockoffSelector(BaseEstimator, SelectorMixin):
         return self.mask_
 
     def score(self, X, y, ground_truth):
-        # check_is_fitted(self, 'mask_')
+        """
+        Computes the FDP and statistical power scores
+        after fitting the selector.
+
+        :param X: Data samples
+        :param y: Target vector
+        :param ground_truth: Features that are truly in the model
+        """
         self.fit(X, y)
         return (
             selection_fdp(self.mask_, ground_truth),
@@ -81,6 +111,20 @@ class BaseKnockoffSelector(BaseEstimator, SelectorMixin):
 
 
 class KnockoffSelector(BaseKnockoffSelector):
+    """
+    Main knockoff selector class, implementing the straightforward
+    knockoff selector procedure.
+
+    :param knockoffs: KnockoffGenerator object that will be fitted
+    :param statistics: KnockoffStatistics object
+    :param alpha: Desired FDR level
+    :param offset: Offset added to the numerator of the threshold
+    expression. Knockoff+ correspond to offset=1. Defaults to 0.
+    :param fit_generator: Whether or not the knockoff generator
+    must be fitted. If it was already fitted before, this is not
+    required and it may be set to False. Defaults to True.
+    """
+
     def __init__(
         self,
         knockoffs,
@@ -98,6 +142,10 @@ class KnockoffSelector(BaseKnockoffSelector):
         super().__init__()
 
     def fit(self, X, y):
+        """
+        :param X: Data samples
+        :param y: Target vector
+        """
         if self.fit_generator:
             self.knockoffs.fit(X)
 

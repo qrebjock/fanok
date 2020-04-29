@@ -116,6 +116,7 @@ def _full_rank(
         W = solve_triangular(R, np.identity(p))
         lam = (1 / np.sum(W * W, axis=1)).max()
         lam = (1 - 1e-6) * lam
+        print(lam)
     if mu is None:
         mu = 0.8
     if max_iterations is None:

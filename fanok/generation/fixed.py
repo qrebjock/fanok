@@ -1,6 +1,6 @@
 import numpy as np
 
-from scipy.linalg import eigh, inv, null_space, solve
+from scipy.linalg import eigh, null_space, solve
 
 from .base import KnockoffsGenerator
 from fanok.sdp import solve_full_sdp
@@ -14,6 +14,13 @@ def fixed_knockoffs_parameters(
     fixed knockoffs from the samples.
     """
     # TODO: not centered case
+    n, p = X.shape[0], X.shape[1]
+    if 2 * p > n:
+        raise ValueError(
+            f"The number of features cannot be larger than half the "
+            f"number of data points. Found X with shape {(n, p)}"
+        )
+
     Sigma = X.T @ X
     s = solve_full_sdp(Sigma, mode=sdp_mode)
     iS_t_s = solve(Sigma, np.diag(s))
@@ -135,7 +142,11 @@ def fixed_knockoffs(
 
 def are_fixed_knockoffs_valid(X: np.ndarray, X_tilde: np.ndarray, tol: float = -1e-12):
     """
-    Checks if knockoffs X_tilde are valid for the samples X.
+    Checks if the fixed knockoffs X_tilde are valid for the samples X.
+
+    :param X: Data samples
+    :param X_tilde: Knockoff samples
+    :param tol: Tolerance threshold, defaults to -1e-12
     """
     Sigma = X.T @ X
     Sigma_tilde = X_tilde.T @ X_tilde
@@ -155,6 +166,8 @@ class FixedKnockoffs(KnockoffsGenerator):
     Abstraction of fixed knockoffs.
     In high-dimension (more features than samples),
     you should use Gaussian knockoffs instead.
+
+    :param sdp_mode: Defines which method is employed to solve the SDP
     """
 
     def __init__(
@@ -169,10 +182,22 @@ class FixedKnockoffs(KnockoffsGenerator):
         self.B_ = None
 
     def fit(self, X: np.ndarray, y: np.ndarray = None):
+        """
+        Fits the knockoff generator against the samples.
+
+        :param X: Data samples (rows are samples, columns are features)
+        """
         self.A_, self.B_ = fixed_knockoffs_parameters(X, sdp_mode=self.sdp_mode)
         return self
 
     def transform(self, X: np.ndarray, y: np.ndarray = None):
+        """
+        Creates fixed knockoff features based on the samples X.
+        Should be used after the generator is fitted.
+
+        :param X: Data samples
+        :return: Fixed knockoff
+        """
         return fixed_knockoffs(
             X,
             sdp_mode=self.sdp_mode,

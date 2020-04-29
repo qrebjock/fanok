@@ -1,183 +1,148 @@
 import numpy as np
+from scipy.linalg import qr, solve_triangular
 
 cimport cython
 cimport numpy as np
 
-from libc.math cimport abs
+from libc.math cimport abs as cabs
 
-from scipy.linalg.cython_blas cimport dger, dsymv, ddot, dcopy
-from scipy.linalg.cython_lapack cimport dgesv
+from scipy.linalg.cython_blas cimport dcopy, dtrmv, dgemv, daxpy, ddot, dtrsv
+# from scipy.linalg.cython_lapack cimport dgesv
 
 from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
+from fanok.utils._qr cimport qr_update
 
 
 cdef double _clip(double x, double amin, double amax) nogil:
     return min(max(x, amin), amax)
 
 
+@cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
 cdef sdp_rank_k(
-        int p, int k,
-        double[::1] d, double[:, ::1] U,
-        int max_iterations, double lam, double mu, double tol
+    int p, int k,
+    double[::1] d, double[:, ::1] U,
+    double[::1] diag_Sigma, double[::1, :] Q, double[:, ::1] R,
+    int max_iterations, double lam, double mu, double tol, double lam_min
 ):
-    cdef np.ndarray[double, ndim=1] s = np.zeros(p, dtype=NP_DOUBLE_D_TYPE)
-    cdef double prev_s_sum = 0, current_s_sum = 0
-    objectives = []
+    objectives = [0]
 
-    cdef double[::1] dms = 1 / (np.multiply(2, d) - s)
+    cdef:
+        np.ndarray[double, ndim=1] s = np.zeros(p, dtype=NP_DOUBLE_D_TYPE)
+        double prev_s_sum = 0, current_s_sum = 0
 
-    cdef double[::1] u_diag_term = np.sum(np.multiply(U, U), axis=1)
+        double kappa = 0
+        double[::1] qr_work = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
+        double[::1] Rz = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
+        double[::1] y = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
+        double* z = NULL
+        double b = 0, c = 0
 
-    cdef double[:, ::1] abc = np.multiply(U.T, dms) @ U
-    cdef double[:, ::1] abc_buffer = np.zeros((k, k), dtype=NP_DOUBLE_D_TYPE)
-    cdef double[::1] abc_t_u = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
-    cdef double[::1] zbc = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
-    cdef int[::1] piv = np.zeros(k, dtype=np.intc)  # np.intc contains the int C type at runtime
-
-    cdef double z, t2, bmb, c
-    cdef int i, j
+        double zero = 0, one = 1, minus_one = -1
+        int inc_1 = 1
+        char* low = 'L'
+        char* no_trans = 'N'
+        char* trans = 'T'
+        char* not_unit = 'N'
 
     for i in range(max_iterations):
         prev_s_sum = current_s_sum
         current_s_sum = 0
         for j in range(p):
-            update_abc(k, abc, -dms[j], j, U)
-            abc_mul_v(k, abc, j, U, abc_t_u)
+            # z = U[j, :]
+            z = &U[j, 0]
 
-            t2 = 8 * compute_t2(k, abc, abc_buffer, abc_t_u, zbc, piv)
-            bmb = 4 * compute_bmb(k, j, U, abc_t_u)
-            c = bmb - t2
+            kappa = 2 / (s[j] - 2 * d[j])
+            qr_update(k, Q, R, &kappa, z, z, &qr_work[0])
 
-            z = 2 * (d[j] + u_diag_term[j]) - lam - c
-            # if z > 1:
-            #     z = 1
-            z = _clip(z, 0, 1)
-            current_s_sum += z
-            s[j] = z
+            # Rz = R @ z
+            dcopy(&k, z, &inc_1, &Rz[0], &inc_1)
+            dtrmv(low, trans, not_unit, &k, &R[0, 0], &k, &Rz[0], &inc_1)
 
-            dms[j] = 1 / (2 * d[j] - s[j])
+            # y = Q @ R @ z
+            dgemv(no_trans, &k, &k, &one, &Q[0, 0], &k, &Rz[0], &inc_1, &zero, &y[0], &inc_1)
+            # y = Q @ R @ z - z
+            daxpy(&k, &minus_one, z, &inc_1, &y[0], &inc_1)
 
-            update_abc(k, abc, dms[j], j, U)
+            # b = z @ y
+            b = ddot(&k, z, &inc_1, &y[0], &inc_1)
+
+            # Rz = Rz - Q.T @ z
+            dgemv(trans, &k, &k, &minus_one, &Q[0, 0], &k, z, &inc_1, &one, &Rz[0], &inc_1)
+
+            # Solve triangular
+            dtrsv(low, trans, not_unit, &k, &R[0, 0], &k, &Rz[0], &inc_1)
+
+            # c = y @ Rz
+            c = ddot(&k, &y[0], &inc_1, &Rz[0], &inc_1)
+
+            s[j] = _clip(2 * diag_Sigma[j] - 2 * b - lam + 2 * c, 0, 1)
+
+            kappa = 2 / (2 * d[j] - s[j])
+            qr_update(k, Q, R, &kappa, z, z, &qr_work[0])
+
+            current_s_sum += s[j]
 
         objectives.append(current_s_sum)
 
-        if current_s_sum == 0 or abs(current_s_sum - prev_s_sum) / current_s_sum < tol:
+        lam = lam * mu
+        if lam < lam_min:
             break
-
-        lam = mu * lam
 
     return s, objectives
 
 
 def _sdp_low_rank(
-        d, u, singular_values=None,
-        max_iterations=None, lam=None, mu=None, tol=5e-5,
+        d, U,
+        max_iterations=None, lam=None, mu=None, tol=5e-5, lam_min=1e-5,
         return_objectives=False
 ):
     # Arrays must be C-contiguous, finite, and the data type C double
     d = np.ascontiguousarray(d, dtype=NP_DOUBLE_D_TYPE)
-    u = np.ascontiguousarray(u, dtype=NP_DOUBLE_D_TYPE)
+    U = np.ascontiguousarray(U, dtype=NP_DOUBLE_D_TYPE)
     if not np.all(np.isfinite(d)):
         raise ValueError(f'The diagonal D contains NaNs or Infs')
-    if not np.all(np.isfinite(u)):
-        raise ValueError(f'The low rank U contains NaNs or Infs')
+    if not np.all(np.isfinite(U)):
+        raise ValueError(f'The low rank U matrix contains NaNs or Infs')
 
     # Dimensions checks
     if d.ndim != 1:
         raise ValueError(f'The diagonal D must be a one-dimensional array')
     p = d.shape[0]
-    if u.ndim == 1:
-        k = 1
-    elif u.ndim == 2:
-        k = u.shape[1]
-    else:
-        raise ValueError(f'The low rank U must be a one or two dimensional array')
-    if p != u.shape[0]:
+    if U.ndim == 1:
+        U = np.reshape(U, (-1, 1))
+    elif U.ndim != 2:
+        raise ValueError(f'The low rank U matrix must be a one or two dimensional array')
+    k = U.shape[1]
+    if p != U.shape[0]:
         raise ValueError(f'Dimensions between D and U don\'t match')
+
+    ztz = np.sum(U * U, axis=1)
+    diag_Sigma = d + ztz
+    Q, R = qr(np.eye(k) + (U.T / d) @ U)
 
     # Default lambda, mu and max_iterations
     if lam is None:
-        lam = np.sqrt(k) / p / 2
+        diag_inv_2Sigma = 0.5 / d - 0.5 * np.diag((U.T / d).T @ (solve_triangular(R, np.eye(k)) @ Q.T) @ (U.T / d))
+        lam = (1 / diag_inv_2Sigma).max()
+        lam = (1 - 1e-6) * lam
+        print(lam)
     if mu is None:
-        mu = 1 - 1 / (k + 1)
+        mu = 0.8
     if max_iterations is None:
+        if tol < 0:
+            raise ValueError(
+                f"Can't automatically set the maximum number of iterations if the tolerance of non positive"
+            )
         max_iterations = np.ceil(np.log(p * lam / tol) / np.log(1 / mu)).astype(int)
 
-    if singular_values is not None:
-        u = u * singular_values
-
-    if u.ndim == 1:
-        # not working yet
-        # return sdp_rank_1(p, d, u, max_iterations, lam, mu, tol)
-        s, objectives = sdp_rank_k(p, 1, d, u[:, None], max_iterations, lam, mu, tol)
-    elif u.ndim == 2:
-        s, objectives = sdp_rank_k(p, k, d, u, max_iterations, lam, mu, tol)
+    s, objectives = sdp_rank_k(
+        p, k, d, U, diag_Sigma, Q, R, max_iterations, lam, mu, tol, lam_min
+    )
 
     if return_objectives:
         return s, objectives
     else:
         return s
-
-
-@cython.boundscheck(False)
-cdef void update_abc(int k, double[:, ::1] abc, double alpha, int j, double[:, ::1] mat_u) nogil:
-    cdef:
-        int inc_v = 1
-
-        double *a0 = &abc[0, 0]
-        double *u0 = &mat_u[j, 0]
-    dger(&k, &k, &alpha, u0, &inc_v, u0, &inc_v, a0, &k)
-
-
-@cython.boundscheck(False)
-cdef void abc_mul_v(int k, double[:, ::1] abc, int j, double[:, ::1] mat, double[::1] out) nogil:
-    cdef:
-        char* uplo = 'L'
-        double alpha = 1
-        double beta = 0
-        int inc = 1
-
-        double *a0 = &abc[0, 0]
-        double *v0 = &mat[j, 0]
-        double *o0 = &out[0]
-
-    dsymv(uplo, &k, &alpha, a0, &k, v0, &inc, &beta, o0, &inc)
-
-
-@cython.boundscheck(False)
-cdef double compute_bmb(int k, int j, double[:, ::1] mat, double[::1] v) nogil:
-    cdef:
-        int inc = 1
-
-        double *u0 = &mat[j, 0]
-        double *v0 = &v[0]
-
-    return ddot(&k, u0, &inc, v0, &inc)
-
-
-@cython.boundscheck(False)
-cdef double compute_t2(
-        int k, double[:, ::1] abc, double[:, ::1] abc_buffer, double[::1] zb, double[::1] zbc, int[::1] piv
-) nogil:
-    # Zb.T @ solve(np.identity(k) + 2 * abc, Zb)
-    cdef:
-        int inc = 1
-        int info = 0
-
-        double* a0 = &abc[0, 0]
-        double* abu0 = &abc_buffer[0, 0]
-        double* zb0 = &zb[0]
-        double* zbc0 = &zbc[0]
-        int* p0 = &piv[0]
-
-    dcopy(&k, zb0, &inc, zbc0, &inc)
-    for i in range(k):
-        for j in range(k):
-            abc_buffer[i, j] = 2 * abc[i, j]
-        abc_buffer[i, i] += 1
-
-    dgesv(&k, &inc, abu0, &k, p0, zbc0, &k, &info)
-    return ddot(&k, zb0, &inc, zbc0, &inc)

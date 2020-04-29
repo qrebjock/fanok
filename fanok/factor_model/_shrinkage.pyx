@@ -7,14 +7,10 @@ cimport numpy as np
 from cython.parallel import prange
 from libc.stdlib cimport rand
 
-FLOAT_NUMPY_TYPE_MAP = {
-    4 : np.float32,
-    8 : np.float64
-}
-NP_DOUBLE_D_TYPE = FLOAT_NUMPY_TYPE_MAP[sizeof(double)]
-
 from scipy.linalg.cython_blas cimport ddot, dgemv, dscal, dnrm2
 from scipy.linalg.cython_lapack cimport dbdsdc
+
+from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
 
 
 @cython.cdivision(True)

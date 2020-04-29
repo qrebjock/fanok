@@ -6,12 +6,19 @@ from sklearn.linear_model import LassoCV
 class KnockoffStatistics:
     """
     Abstraction of flip-sign knockoff statistics.
+
+    Must implement the method evaluate.
     """
 
     def __init__(self):
         pass
 
     def evaluate(self, X, X_tilde, y):
+        """
+        :param X: Data samples
+        :param X_tilde: Knockoff samples
+        :param y: Target vector
+        """
         pass
 
     def __call__(self, X, X_tilde, y):
@@ -39,6 +46,13 @@ def antisymmetric_knockoff_statistics(
     Applies an anti-symmetric function to pairs of original and knockoff
     statistics. This is a natural way to obtain statistics satisfying
     the flip sign property that is required to control the FDR.
+
+    :param z: Statistics from the original features
+    :param z_tilde: Statistics from the knockoff features.
+    If None, it will consider they are in the parameter z.
+    :param mode: Which antisymmetric function is applied to
+    aggregate the statistics from the original features and from the
+    knockoffs. By default, the difference is used.
     """
     if z_tilde is None:
         z, z_tilde = np.split(z, 2)
@@ -59,6 +73,10 @@ class AntisymmetricStatistics(KnockoffStatistics):
     """
     Flip-sign knockoff statistics computed in two steps,
     through and antisymmetric function.
+
+    :param antisymmetry: Which antisymmetric function is applied to
+    aggregate the statistics from the original features and from the
+    knockoffs. By default, the difference is used.
     """
 
     def __init__(self, antisymmetry="difference"):
@@ -77,6 +95,16 @@ class AntisymmetricStatistics(KnockoffStatistics):
 class EstimatorStatistics(AntisymmetricStatistics):
     """
     Flip-sign knockoff statistics
+
+    :param estimator: Estimator which is fitted against [X, X_tilde]
+    in order to compute the statistics.
+    It must provide an attribute "coef_" after it is fitted.
+    By default, the LassoCV estimator from Scikit-Learn is used.
+    :param antisymmetry: Which antisymmetric function is applied to
+    aggregate the statistics from the original features and from the
+    knockoffs. By default, the difference is used.
+    :param absolute: Whether or not to keep the coefficients of
+    the estimator in absolute value. Defaults to True.
     """
 
     def __init__(

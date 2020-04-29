@@ -3,7 +3,12 @@ from scipy.linalg import eigh
 
 from fanok.sdp._full_rank import _full_rank
 from fanok.sdp._low_rank import _sdp_low_rank
-import cvxpy as cp
+
+try:
+    import cvxpy as cp
+except ImportError:
+    # CVXPY isn't installed
+    cp = None
 
 
 def cov_to_cor(Sigma: np.ndarray):
@@ -34,10 +39,18 @@ def sdp_equi(Sigma: np.ndarray):
     return min(1, 2 * min_eigenvalue) * np.diag(Sigma)
 
 
-def cvx_sdp_full(Sigma: np.ndarray, solver=cp.SCS, clip: bool = True, **kwargs):
+def cvx_sdp_full(Sigma: np.ndarray, solver=None, clip: bool = True, **kwargs):
     """
     Solves the SDP with CVXPY.
     """
+    if cp is None:
+        raise ImportError(
+            f"CVXPY is not installed; you cannot solve the SDP with it."
+            f"Instead, either solve the SDP with coordinate ascent or install CVXPY."
+        )
+    if solver is None:
+        solver = cp.SCS
+
     p = Sigma.shape[0]
     if p != Sigma.shape[1]:
         raise ValueError("Sigma is not a square matrix")
@@ -64,6 +77,7 @@ def sdp_full(
     Sigma, max_iterations=None, lam=None, mu=None, tol=5e-5, return_objectives=False
 ):
     """
+    Solves the SDP with a fast coordinate ascent algorithm.
     Wrapper of the efficient Cython implementation.
     """
     cor = cov_to_cor(Sigma)
@@ -94,7 +108,10 @@ def sdp_low_rank(
     Solves the low-rank SDP with coordinate ascent.
     Wrapper of the efficient Cython implementation.
     """
-    # TODO: Handle singular values
+    if singular_values is not None:
+        U = U * singular_values
+
+    # Scale Sigma to a correlation matrix
     ztz = np.sum(U * U, axis=1)
     diag_Sigma = d + ztz
     inv_sqrt = 1 / np.sqrt(diag_Sigma)
@@ -104,7 +121,6 @@ def sdp_low_rank(
     s = _sdp_low_rank(
         d,
         U,
-        singular_values=singular_values,
         max_iterations=max_iterations,
         lam=lam,
         mu=mu,
