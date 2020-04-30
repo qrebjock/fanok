@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.linalg import eigh
+from scipy.spatial.distance import pdist
+from scipy.cluster.hierarchy import linkage, cut_tree
 
 from fanok.sdp._full_rank import _full_rank
 from fanok.sdp._low_rank import _sdp_low_rank
@@ -75,7 +77,48 @@ def cvx_sdp_full(Sigma: np.ndarray, solver=None, clip: bool = True, **kwargs):
     return s.value
 
 
-# TODO: Approximated SDP
+def make_asdp_clusters(Sigma, blocks):
+    cor = cov_to_cor(Sigma)
+    dissimilarity = 1 - cor
+
+    distances = pdist(dissimilarity)
+    lkg = linkage(distances, method="ward")
+    labels = np.squeeze(cut_tree(lkg, blocks))
+
+    sub_Sigmas = []
+    indices = []
+    for label in range(blocks):
+        ind = np.where(labels == label)[0]
+        indices.append(ind)
+        sub_Sigmas.append(Sigma[np.ix_(ind, ind)])
+
+    return indices, sub_Sigmas
+
+
+def asdp(Sigma: np.ndarray, blocks: int, gamma_tol: float = 1e-3, **kwargs):
+    p = Sigma.shape[0]
+    if p != Sigma.shape[1]:
+        raise ValueError("Sigma is not a square matrix")
+
+    # Clustering step and solving sub SDPs
+    indices, sub_Sigmas = make_asdp_clusters(Sigma, blocks)
+    s = np.zeros(p)
+    for i, sub_Sigma in enumerate(sub_Sigmas):
+        s[indices[i]] = solve_full_sdp(sub_Sigma, mode="sdp", **kwargs)
+
+    gamma_min, gamma_max = 0, 1
+    while gamma_max - gamma_min > gamma_tol:
+        gamma = (gamma_max + gamma_min) / 2
+        G = 2 * Sigma - gamma * np.diag(s)
+        min_eigenvalue = eigh(G, eigvals_only=True, eigvals=(0, 0))[0]
+        if min_eigenvalue >= 0:
+            gamma_min = gamma
+        else:
+            gamma_max = gamma
+
+    s = s * gamma_min
+
+    return s
 
 
 def sdp_full(
@@ -161,6 +204,8 @@ def solve_full_sdp(
         res = sdp_full(Sigma, **kwargs)
     elif mode == "cvx":
         res = cvx_sdp_full(Sigma, **kwargs)
+    elif mode == "asdp":
+        res = asdp(Sigma, **kwargs)
     elif mode == "ones":
         res = np.ones(Sigma.shape[0]) * 1e-16
     elif mode == "zero":
