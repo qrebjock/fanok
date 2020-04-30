@@ -14,6 +14,8 @@ except ImportError:
 def cov_to_cor(Sigma: np.ndarray):
     """
     Converts a covariance matrix to a correlation matrix.
+
+    :param Sigma: Covariance matrix
     """
     d = 1 / np.sqrt(np.diag(Sigma))
     return d[:, None] * Sigma * d
@@ -25,6 +27,9 @@ def sdp_equi(Sigma: np.ndarray):
     This is a cheap way to find a feasible solution to the SDP
     but knockoffs generated with it might lead to a low statistical
     power.
+
+    :param Sigma: Covariance matrix. It is scaled to a correlation matrix
+    and the result is scaled back at the end.
     """
     if Sigma.shape[0] != Sigma.shape[1]:
         raise ValueError("Sigma is not a square matrix")
@@ -91,7 +96,14 @@ def sdp_full(
         return_objectives=return_objectives,
     )
 
-    return s * np.diag(Sigma)
+    if return_objectives:
+        s, objectives = s
+
+    s = s * np.diag(Sigma)
+
+    if return_objectives:
+        return s, objectives
+    return s
 
 
 def sdp_low_rank(
@@ -128,7 +140,14 @@ def sdp_low_rank(
         return_objectives=return_objectives,
     )
 
-    return s * diag_Sigma
+    if return_objectives:
+        s, objectives = s
+
+    s = s * diag_Sigma
+
+    if return_objectives:
+        return s, objectives
+    return s
 
 
 def solve_full_sdp(

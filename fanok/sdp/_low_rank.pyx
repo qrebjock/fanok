@@ -125,10 +125,9 @@ def _sdp_low_rank(
 
     # Default lambda, mu and max_iterations
     if lam is None:
-        diag_inv_2Sigma = 0.5 / d - 0.5 * np.diag((U.T / d).T @ (solve_triangular(R, np.eye(k)) @ Q.T) @ (U.T / d))
+        diag_inv_2Sigma = 0.5 / d - 0.5 * np.sum((U @ solve_triangular(R, np.eye(k))) * (U @ Q), axis=1) / d / d
         lam = (1 / diag_inv_2Sigma).max()
         lam = (1 - 1e-6) * lam
-        print(lam)
     if mu is None:
         mu = 0.8
     if max_iterations is None:
