@@ -74,7 +74,7 @@ def test_randomized_factor_model():
     assert np.allclose(Sigma, Sigma2)
 
     d, U, eig = randomized_factor_model(
-        X, rank=2, num_iterations=5, shrink=True, shrinkage_mode="full"
+        X, rank=2, num_iterations=5, shrink=True, shrinkage_mode="exact"
     )
     Sigma = ledoit_wolf(X, assume_centered=True)[0]
     Sigma2 = np.diag(d) + U @ np.diag(eig) @ U.T

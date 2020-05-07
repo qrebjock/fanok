@@ -9,7 +9,7 @@ from fanok.factor_model._shrinkage import (
 
 
 def ledoit_wolf_shrinkage(
-    X: np.ndarray, s: np.ndarray = None, mode: str = "full", m: int = 20, n_v: int = 20
+    X: np.ndarray, s: np.ndarray = None, mode: str = "exact", m: int = 20, n_v: int = 20
 ):
     """
     Computes the Ledoit-Wolf optimal shrinkage coefficient from the sample X.
@@ -23,7 +23,7 @@ def ledoit_wolf_shrinkage(
     """
     n, p = X.shape
 
-    if mode == "full":
+    if mode == "exact":
         if s is None:
             return _ledoit_wolf_shrinkage(X)
         else:
@@ -31,7 +31,9 @@ def ledoit_wolf_shrinkage(
     elif mode == "random":
         tr2 = _stochastic_lanczos_quadrature(X, m, n_v)
     else:
-        raise ValueError(f"")
+        raise ValueError(
+            f"Ledoit-Wolf shrinkage mode can be either 'exact' or 'random'. Found f{mode}."
+        )
 
     tr, sst = _shrinkage_tr_sst(X)
     d = tr2 - tr ** 2 / p
@@ -42,8 +44,10 @@ def ledoit_wolf_shrinkage(
 
 def single_step_factor_model(X: np.ndarray, rank: int, mode: str = "ledoit"):
     """
-    # TODO: Option to do diagonal first, low-rank after.
+    :param X: Data samples
+    :param rank: Rank approximation
     """
+    # TODO: Option to do diagonal first, low-rank after.
     n = X.shape[0]
 
     _, lam, Vt = svd(X, full_matrices=False)
@@ -128,6 +132,20 @@ def randomized_factor_model(
     m: int = 20,
     n_v: int = 20,
 ):
+    """
+    :param X: Data samples
+    :param rank: Rank approximation. Defaults to 5
+    :param over_sample: How many more vectors than the rank to use
+    for the low-rank approximation. This is essentialy usefull for
+    stability purposes when the rank is low. Defaults to 10.
+    :param num_iterations: How many iterations to perform in
+    the alternating minimization algorithms.
+    :param shrink: Whether or not to shrink the covariance matrix
+    (Ledoit-Wolf estimation). This is recommended in high dimension.
+    Defaults to True.
+    :param shrinkage_mode: How should the optimal shrinkage coefficient
+    be computed, in case of Ledoit-Wolf estimation.
+    """
     n, p = X.shape
 
     if shrink:

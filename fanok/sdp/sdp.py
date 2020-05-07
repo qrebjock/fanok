@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from scipy.linalg import eigh
 from scipy.spatial.distance import pdist
@@ -49,6 +51,13 @@ def sdp_equi(Sigma: np.ndarray):
 def cvx_sdp_full(Sigma: np.ndarray, solver=None, clip: bool = True, **kwargs):
     """
     Solves the SDP with CVXPY.
+
+    :param Sigma: Covariance matrix
+    :param solver: Which solver to use. Defaults to SCS
+    :param clip: Whether or not to clip the solution (on the correlation matrix)
+    into [0, 1]. It is only supposed to fix eventual numerical approximations
+    of the solver. Defaults to True
+    :param kwargs: Extra keyword arguments passed to the solver
     """
     if cp is None:
         raise ImportError(
@@ -77,7 +86,14 @@ def cvx_sdp_full(Sigma: np.ndarray, solver=None, clip: bool = True, **kwargs):
     return s.value
 
 
-def make_asdp_clusters(Sigma, blocks):
+def make_asdp_clusters(Sigma: np.ndarray, blocks: int = 2):
+    """
+    Approximates the covariance matrix Sigma with a block
+    diagonal matrix.
+
+    :param Sigma: Covariance matrix
+    :param blocks: Number of clusters
+    """
     cor = cov_to_cor(Sigma)
     dissimilarity = 1 - cor
 
@@ -95,7 +111,18 @@ def make_asdp_clusters(Sigma, blocks):
     return indices, sub_Sigmas
 
 
-def asdp(Sigma: np.ndarray, blocks: int, gamma_tol: float = 1e-3, **kwargs):
+def asdp(Sigma: np.ndarray, blocks: int = 2, gamma_tol: float = 1e-5, **kwargs):
+    """
+    Solves the SDP in two steps. First the covariance is approximated with
+    a block-diagonal matrix. Sub-SDPs are solved in these blocks.
+    Then, a one-dimensional SDP is efficiently solved with bisection in
+    order to make the solution feasible.
+
+    :param Sigma: Covariance matrix
+    :param blocks: Number of clusters
+    :param gamma_tol: Tolerance threshold when solving the one-dimensional SDP
+    :param kwargs: Extra keyword arguments given to the SDP solver
+    """
     p = Sigma.shape[0]
     if p != Sigma.shape[1]:
         raise ValueError("Sigma is not a square matrix")
@@ -116,31 +143,49 @@ def asdp(Sigma: np.ndarray, blocks: int, gamma_tol: float = 1e-3, **kwargs):
         else:
             gamma_max = gamma
 
+    if gamma_min == 0:
+        warnings.warn(
+            "When solving the ASDP, found gamma = 0. "
+            "The knockoffs won't have any power. "
+            "Consider lowering the parameter gamma_tol",
+        )
     s = s * gamma_min
 
     return s
 
 
 def sdp_full(
-    Sigma, max_iterations=None, lam=None, mu=None, tol=5e-5, return_objectives=False
+    Sigma,
+    max_iterations: int = None,
+    lam: float = None,
+    mu: float = None,
+    tol: float = 5e-5,
+    return_objectives: bool = False,
 ):
     """
     Solves the SDP with a fast coordinate ascent algorithm.
     Wrapper of the efficient Cython implementation.
+
+    :param Sigma: Covariance matrix
+    :param max_iterations: Maximum number of coordinate cycles
+    :param lam: Initial barrier coefficient parameter. Most
+    you don't need to change this parameter because the default
+    value automatically adapts to the problem.
+    :param mu: Barrier coefficient decay parameter. Should be comprised
+    between 0 and 1. Lower values are ore aggressive but might not
+    converge to the optimal value (machine precision is reached faster).
+    Defaults to 0.8.
     """
     cor = cov_to_cor(Sigma)
 
-    s = _full_rank(
+    s, objectives = _full_rank(
         cor,
         max_iterations=max_iterations,
         lam=lam,
         mu=mu,
         tol=tol,
-        return_objectives=return_objectives,
+        return_objectives=True,
     )
-
-    if return_objectives:
-        s, objectives = s
 
     s = s * np.diag(Sigma)
 
@@ -150,18 +195,34 @@ def sdp_full(
 
 
 def sdp_low_rank(
-    d,
-    U,
-    singular_values=None,
-    max_iterations=None,
-    lam=None,
-    mu=None,
-    tol=5e-5,
-    return_objectives=False,
+    d: np.ndarray,
+    U: np.ndarray,
+    singular_values: np.ndarray = None,
+    max_iterations: int = None,
+    lam: float = None,
+    mu: float = None,
+    tol: float = 5e-5,
+    return_objectives: bool = False,
 ):
     """
     Solves the low-rank SDP with coordinate ascent.
+    The covariance Sigma is supposed to have the special structure
+    Sigma = diag(d) + U * eigs * U^T
     Wrapper of the efficient Cython implementation.
+
+    :param d: Positive diagonal term of the factor model
+    :param U: Low-rank term of the factor model
+    :param singular_values: Optional singular_values of the low-rank term
+    :param max_iterations: Maximum number of coordinate cycles
+    :param lam: Initial barrier coefficient parameter. Most
+    you don't need to change this parameter because the default
+    value automatically adapts to the problem.
+    :param mu: Barrier coefficient decay parameter. Should be comprised
+    between 0 and 1. Lower values are ore aggressive but might not
+    converge to the optimal value (machine precision is reached faster).
+    Defaults to 0.8.
+    :param return_objectives: Whether or not the sequences of objectives
+    should be returned. Defaults to False
     """
     if singular_values is not None:
         U = U * singular_values
@@ -173,18 +234,15 @@ def sdp_low_rank(
     d = d / diag_Sigma
     U = inv_sqrt[:, None] * U
 
-    s = _sdp_low_rank(
+    s, objectives = _sdp_low_rank(
         d,
         U,
         max_iterations=max_iterations,
         lam=lam,
         mu=mu,
         tol=tol,
-        return_objectives=return_objectives,
+        return_objectives=True,
     )
-
-    if return_objectives:
-        s, objectives = s
 
     s = s * diag_Sigma
 
@@ -197,6 +255,13 @@ def solve_full_sdp(
     Sigma: np.ndarray, mode: str = "equi", return_diag: bool = False, **kwargs
 ):
     """
+    Solves the SDP with one of the available methods ("equi", "sdp",
+    "cvx", "asdp").
+
+    :param Sigma: Covariance matrix
+    :param mode: Method to solve the SDP
+    :param return_diag: Whether to return a diagonal matrix or not
+    (just the solution vector). Defaults to False.
     """
     if mode == "equi":
         res = sdp_equi(Sigma, **kwargs)

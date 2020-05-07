@@ -53,6 +53,15 @@ cdef void hessenberg_qr_update(
     int p, double[::1, :] Q, double[:, ::1] R,
     double* kappa, double* u0, double* v0, double* w0
 ) nogil:
+    """
+    Updates the QR factorization of an upper Hessenberg matrix
+    (upper triangular with potential non-null entries on the lower
+    diagonal).
+
+    :param p: Size of the matrix
+    :param Q: Q factor
+    :param R: R factor
+    """
     cdef:
         int j = 0
 
@@ -84,6 +93,20 @@ cdef void qr_update(
     int p, double[::1, :] Q, double[:, ::1] R,
     double* kappa, double* u0, double* v0, double* w0
 ) nogil:
+    """
+    Updates the QR decomposition of a matrix.
+    M = QR
+    M' = M + kappa * u * v^T
+    Computes the factors M' = Q'*R'
+
+    :param p: Size of the matrix
+    :param Q: Q factor
+    :param R: R factor
+    :param kappa: Rank-1 scalar factor
+    :param u: Rank-1 vector factor
+    :param v: Rank-1 vector factor
+    :param w0: Working array. Overwritten at the end of the function
+    """
     hessenberg_qr_update(p, Q, R, kappa, u0, v0, w0)
     hessenberg_qr(p, Q, R)
 

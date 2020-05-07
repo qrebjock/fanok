@@ -94,6 +94,7 @@ def _check_R_u(R: np.ndarray, u: np.ndarray, upper: bool = True):
 
     return p, R, u
 
+
 def _cholupdate(R: np.ndarray, u: np.ndarray, upper: bool = True):
     p, R, u = _check_R_u(R, u, upper)
     __cholupdate(p, R, u)
