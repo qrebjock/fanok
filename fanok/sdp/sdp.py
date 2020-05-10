@@ -48,7 +48,7 @@ def sdp_equi(Sigma: np.ndarray):
     return min(1, 2 * min_eigenvalue) * np.diag(Sigma)
 
 
-def cvx_sdp_full(Sigma: np.ndarray, solver=None, clip: bool = True, **kwargs):
+def cvx_sdp_full(Sigma: np.ndarray, solver: str = None, clip: bool = True, **kwargs):
     """
     Solves the SDP with CVXPY.
 
@@ -64,6 +64,9 @@ def cvx_sdp_full(Sigma: np.ndarray, solver=None, clip: bool = True, **kwargs):
             f"CVXPY is not installed; you cannot solve the SDP with it."
             f"Instead, either solve the SDP with coordinate ascent or install CVXPY."
         )
+    # Default solver; SCS is installed by default with CVXPY
+    # and scales pretty well. CVXOPT is another strong option
+    # but must be installed separately.
     if solver is None:
         solver = cp.SCS
 
@@ -79,6 +82,8 @@ def cvx_sdp_full(Sigma: np.ndarray, solver=None, clip: bool = True, **kwargs):
     problem = cp.Problem(objective, constraints)
 
     problem.solve(solver=solver, **kwargs)
+    if s.value is None:
+        raise RuntimeError("CVX didn't converge")
     if clip:
         s.value = np.clip(s.value, a_min=0, a_max=1)
     s.value *= np.diag(Sigma)
@@ -155,11 +160,12 @@ def asdp(Sigma: np.ndarray, blocks: int = 2, gamma_tol: float = 1e-5, **kwargs):
 
 
 def sdp_full(
-    Sigma,
+    Sigma: np.ndarray,
     max_iterations: int = None,
     lam: float = None,
     mu: float = None,
-    tol: float = 5e-5,
+    tol: float = -1,
+    eps=1e-5,
     return_objectives: bool = False,
 ):
     """
@@ -184,6 +190,7 @@ def sdp_full(
         lam=lam,
         mu=mu,
         tol=tol,
+        eps=eps,
         return_objectives=True,
     )
 
@@ -201,7 +208,8 @@ def sdp_low_rank(
     max_iterations: int = None,
     lam: float = None,
     mu: float = None,
-    tol: float = 5e-5,
+    tol: float = -1,
+    eps: float = 1e-5,
     return_objectives: bool = False,
 ):
     """
@@ -241,6 +249,7 @@ def sdp_low_rank(
         lam=lam,
         mu=mu,
         tol=tol,
+        eps=eps,
         return_objectives=True,
     )
 

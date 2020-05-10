@@ -22,10 +22,18 @@ cdef double _clip(double x, double amin, double amax) nogil:
 @cython.wraparound(False)
 @cython.nonecheck(False)
 cdef sdp_rank_k(
-    int p, int k,
-    double[::1] d, double[:, ::1] U,
-    double[::1] diag_Sigma, double[::1, :] Q, double[:, ::1] R,
-    int max_iterations, double lam, double mu, double tol, double lam_min
+    int p,
+    int k,
+    double[::1] d,
+    double[:, ::1] U,
+    double[::1] diag_Sigma,
+    double[::1, :] Q,
+    double[:, ::1] R,
+    int max_iterations,
+    double lam,
+    double mu,
+    double tol,
+    double lam_min
 ):
     objectives = [0]
 
@@ -95,9 +103,14 @@ cdef sdp_rank_k(
 
 
 def _sdp_low_rank(
-        d, U,
-        max_iterations=None, lam=None, mu=None, tol=5e-5, lam_min=1e-5,
-        return_objectives=False
+    d,
+    U,
+    max_iterations=None,
+    lam=None,
+    mu=None,
+    tol=-1,
+    eps=1e-5,
+    return_objectives=False
 ):
     # Arrays must be C-contiguous, finite, and the data type C double
     d = np.ascontiguousarray(d, dtype=NP_DOUBLE_D_TYPE)
@@ -124,19 +137,30 @@ def _sdp_low_rank(
     Q, R = qr(np.eye(k) + (U.T / d) @ U)
 
     # Default lambda, mu and max_iterations
+    if mu is None:
+        mu = 0.8
+    elif mu >= 1 or mu <= 0:
+        raise ValueError(f"The decay parameter mu must be between 0 and 1. Found {mu}.")
+    # Find the first value of lambda such that a coordinate of s will change
     if lam is None:
         diag_inv_2Sigma = 0.5 / d - 0.5 * np.sum((U @ solve_triangular(R, np.eye(k))) * (U @ Q), axis=1) / d / d
         lam = (1 / diag_inv_2Sigma).max()
-        lam = (1 - 1e-6) * lam
-    if mu is None:
-        mu = 0.8
+        lam = mu * lam
+    elif lam <= 0:
+        raise ValueError(f"The barrier parameter lam must be positive. Found {lam}.")
+    # if tol < 0:
+    #     raise ValueError(f"The tolerance cannot be negative. Found {tol}.")
+    if eps < 0:
+        raise ValueError(f"eps cannot be negative. Found {eps}")
     if max_iterations is None:
-        if tol < 0:
+        if eps == 0:
             raise ValueError(
-                f"Can't automatically set the maximum number of iterations if the tolerance of non positive"
+                f"Can't automatically set the maximum number of iterations if eps is null"
             )
-        max_iterations = np.ceil(np.log(p * lam / tol) / np.log(1 / mu)).astype(int)
+        max_iterations = np.ceil(np.log(eps / (3 * lam)) / np.log(mu)).astype(int) + 1
+    lam_min = eps / 3  # Average eps. Default global one, divide by p too
 
+    # Cython fast solver
     s, objectives = sdp_rank_k(
         p, k, d, U, diag_Sigma, Q, R, max_iterations, lam, mu, tol, lam_min
     )

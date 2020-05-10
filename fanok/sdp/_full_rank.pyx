@@ -28,7 +28,8 @@ cdef __full_rank(
     int max_iterations,
     double lam,
     double mu,
-    double tol
+    double tol,
+    double lam_min
 ):
     objectives = [0]
 
@@ -84,18 +85,22 @@ cdef __full_rank(
         if current_s_sum == 0 or abs(current_s_sum - prev_s_sum) / current_s_sum < tol:
             break
 
+        if lam < lam_min:
+            break
+
         lam = lam * mu
 
     return s, objectives
 
 
 def _full_rank(
-        Sigma,
-        max_iterations=None,
-        lam=None,
-        mu=None,
-        tol=5e-5,
-        return_objectives=False
+    Sigma,
+    max_iterations=None,
+    lam=None,
+    mu=None,
+    tol=-1,  # This parameter will likely disappear in the future
+    eps=1e-5,
+    return_objectives=False
 ):
     # Arrays must be C-contiguous, finite, and the data type C double
     Sigma = np.ascontiguousarray(Sigma, dtype=NP_DOUBLE_D_TYPE)
@@ -111,21 +116,32 @@ def _full_rank(
 
     R = cholesky(2 * Sigma, lower=True).T  # Upper triangular + C-contiguous
 
-    # Default lambda, mu and max_iterations
+    # Default lambda, mu and max_iterations and sanity checks
+    if mu is None:
+        mu = 0.8
+    elif mu >= 1 or mu <= 0:
+        raise ValueError(f"The decay parameter mu must be between 0 and 1. Found {mu}.")
+    # Find the first value of lambda such that a coordinate of s will change
     if lam is None:
         W = solve_triangular(R, np.identity(p))
         lam = (1 / np.sum(W * W, axis=1)).max()
-        lam = (1 - 1e-6) * lam
-    if mu is None:
-        mu = 0.8
+        lam = mu * lam
+    elif lam <= 0:
+        raise ValueError(f"The barrier parameter lam must be positive. Found {lam}.")
+    # if tol < 0:
+    #     raise ValueError(f"The tolerance cannot be negative. Found {tol}.")
+    if eps < 0:
+        raise ValueError(f"eps cannot be negative. Found {eps}")
     if max_iterations is None:
-        if tol < 0:
+        if eps == 0:
             raise ValueError(
-                f"Can't automatically set the maximum number of iterations if the tolerance of non positive"
+                f"Can't automatically set the maximum number of iterations if eps is null"
             )
-        max_iterations = np.ceil(np.log(p * lam / tol) / np.log(1 / mu)).astype(int)
+        max_iterations = np.ceil(np.log(eps / (3 * lam)) / np.log(mu)).astype(int) + 1
+    lam_min = eps / 3  # Average eps. Default global one, divide by p too
 
-    s, objectives = __full_rank(p, Sigma, R, max_iterations, lam, mu, tol)
+    # Cython fast solver
+    s, objectives = __full_rank(p, Sigma, R, max_iterations, lam, mu, tol, lam_min)
 
     if return_objectives:
         return s, objectives
