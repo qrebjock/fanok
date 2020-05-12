@@ -17,6 +17,10 @@ Use `pip install requirements.txt` to install them.
 
 `pip install fanok`
 
+## Documentation
+
+[Here](https://fanok.readthedocs.io/en/latest/)
+
 ## Usage
 
 Here is a minimal usage example:
