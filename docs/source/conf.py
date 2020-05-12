@@ -13,7 +13,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../../fanok"))
+sys.path.insert(0, os.path.abspath("../../"))
 
 
 # -- Project information -----------------------------------------------------
@@ -25,7 +25,7 @@ copyright = (
 author = "Armin Askari, Quentin Rebjock, Laurent El Ghaoui, and Alexandre d’Aspremont"
 
 # The full version, including alpha/beta/rc tags
-release = "0.0.2"
+release = "0.0.3"
 
 
 # -- General configuration ---------------------------------------------------
