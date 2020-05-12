@@ -5,4 +5,3 @@ fanok
    :maxdepth: 4
 
    fanok
-   setup

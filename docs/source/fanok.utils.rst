@@ -4,6 +4,14 @@ fanok.utils package
 Submodules
 ----------
 
+fanok.utils.base module
+-----------------------
+
+.. automodule:: fanok.utils.base
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 fanok.utils.cholesky module
 ---------------------------
 
