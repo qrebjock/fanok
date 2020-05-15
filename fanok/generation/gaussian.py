@@ -265,7 +265,9 @@ def sample_low_rank_gaussian_knockoffs(
         c, Z, P = low_rank_gaussian_knockoffs_sampling_parameters(d, U, lam, s)
 
     X_tilde = sample_low_rank_gaussian(X.shape[0], c, Z)
-    mu_tilde = X - X / d * s + ((s * X) @ P) @ P.T
+
+    mu = np.mean(X, axis=0)
+    mu_tilde = X - (X - mu) * s / d + (X - mu) @ P @ Z.T
 
     return mu_tilde + X_tilde
 
