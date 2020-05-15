@@ -116,6 +116,19 @@ def make_asdp_clusters(Sigma: np.ndarray, blocks: int = 2):
     return indices, sub_Sigmas
 
 
+def bisect_solution(Sigma: np.ndarray, s: np.ndarray, gamma_tol: float):
+    gamma_min, gamma_max = 0, 1
+    while gamma_max - gamma_min > gamma_tol:
+        gamma = (gamma_max + gamma_min) / 2
+        G = 2 * Sigma - gamma * np.diag(s)
+        min_eigenvalue = eigh(G, eigvals_only=True, eigvals=(0, 0))[0]
+        if min_eigenvalue >= 0:
+            gamma_min = gamma
+        else:
+            gamma_max = gamma
+    return gamma_min
+
+
 def asdp(Sigma: np.ndarray, blocks: int = 2, gamma_tol: float = 1e-5, **kwargs):
     """
     Solves the SDP in two steps. First the covariance is approximated with
@@ -138,23 +151,15 @@ def asdp(Sigma: np.ndarray, blocks: int = 2, gamma_tol: float = 1e-5, **kwargs):
     for i, sub_Sigma in enumerate(sub_Sigmas):
         s[indices[i]] = solve_full_sdp(sub_Sigma, mode="sdp", **kwargs)
 
-    gamma_min, gamma_max = 0, 1
-    while gamma_max - gamma_min > gamma_tol:
-        gamma = (gamma_max + gamma_min) / 2
-        G = 2 * Sigma - gamma * np.diag(s)
-        min_eigenvalue = eigh(G, eigvals_only=True, eigvals=(0, 0))[0]
-        if min_eigenvalue >= 0:
-            gamma_min = gamma
-        else:
-            gamma_max = gamma
+    gamma = bisect_solution(Sigma, s, gamma_tol=gamma_tol)
 
-    if gamma_min == 0:
+    if gamma == 0:
         warnings.warn(
             "When solving the ASDP, found gamma = 0. "
             "The knockoffs won't have any power. "
             "Consider lowering the parameter gamma_tol",
         )
-    s = s * gamma_min
+    s = s * gamma
 
     return s
 
@@ -257,6 +262,43 @@ def sdp_low_rank(
 
     if return_objectives:
         return s, objectives
+    return s
+
+
+def sdp_hybrid(
+    Sigma: np.ndarray,
+    d: np.ndarray,
+    U: np.ndarray,
+    singular_values: np.ndarray = None,
+    max_iterations: int = None,
+    lam: float = None,
+    mu: float = None,
+    tol: float = -1,
+    eps: float = 1e-5,
+    gamma_tol=1e-5,
+):
+    s = sdp_low_rank(
+        d,
+        U,
+        singular_values,
+        max_iterations,
+        lam,
+        mu,
+        tol,
+        eps,
+        return_objectives=False,
+    )
+
+    gamma = bisect_solution(Sigma, s, gamma_tol=gamma_tol)
+
+    if gamma == 0:
+        warnings.warn(
+            "When solving the ASDP, found gamma = 0. "
+            "The knockoffs won't have any power. "
+            "Consider lowering the parameter gamma_tol",
+        )
+    s = s * gamma
+
     return s
 
 
