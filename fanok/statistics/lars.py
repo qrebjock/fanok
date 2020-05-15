@@ -20,12 +20,12 @@ class LarsEstimator(BaseEstimator):
         self.normalize = normalize
         self.lambdas = lambdas
 
-    def fit(self, X, X_tilde, y):
+    def fit(self, X, y):
         if self.lambdas is None:
             lars = LassoLars(
                 alpha=1e-15, normalize=self.normalize, max_iter=4 * X.shape[1]
             )
-            lars.fit(np.hstack((X, X_tilde)), y)
+            lars.fit(X, y)
             self.coef_ = lars.alphas_[
                 np.argmax(lars.coef_path_.astype(bool), axis=1) - 1
             ]
