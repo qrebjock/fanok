@@ -3,7 +3,7 @@ import numpy as np
 from scipy.linalg import cholesky, lstsq
 from sklearn.covariance import empirical_covariance, ledoit_wolf, GraphicalLassoCV
 
-from fanok.sdp import solve_full_sdp, sdp_low_rank
+from fanok.sdp import solve_full_sdp, sdp_low_rank, sdp_hybrid
 from .base import KnockoffsGenerator
 
 
@@ -213,6 +213,80 @@ class LowRankGaussianKnockoffs(KnockoffsGenerator):
             X, d=self.d_, s=self.s_, c=self.c_, Z=self.Z_, P=self.P_
         )
 
+
+class LowRankHybridGaussianKnockoffs(KnockoffsGenerator):
+    """
+    Low-rank Hybrid Gaussian knockoffs.
+    Requires a factor-model for the covariance matrix.
+
+    :param factor_model: Object of type FactorModel capable of
+    computing the low-rank approximation of the covariance Sigma.
+    :param fit_factor_model: Whether or not the factor model should
+    be fitted when the generator is fitted, defaults to True
+    """
+
+    def __init__(self,
+                 factor_model,
+                 fit_factor_model: bool = True,
+                 covariance_mode: str = "wolf",
+                 assume_centered: bool = False):
+        super().__init__()
+        self.factor_model = factor_model
+        self.fit_factor_model = fit_factor_model
+        self.covariance_mode = covariance_mode
+        self.assume_centered = assume_centered
+
+    def fit(
+        self,
+        X: np.ndarray = None,
+        mu: np.ndarray = None,
+        Sigma: np.ndarray = None,
+        d: np.ndarray = None,
+        U: np.ndarray = None,
+        singular_values: np.ndarray = None,
+        sdp_kwargs: dict = None,
+        cov_tol: float = 1e-10,
+    ):
+        if (mu is None or Sigma is None) and X is None:
+            raise ValueError(
+                "mu/Sigma are None, and X is None. Feed X to estimate mu and Sigma"
+            )
+        if mu is None:
+            mu = np.mean(X, axis=0)
+        if Sigma is None:
+            Sigma = estimate_covariance(
+                X, mode=self.covariance_mode,
+                assume_centered=self.assume_centered
+            )
+        if sdp_kwargs is None:
+            sdp_kwargs = {}
+
+        if self.fit_factor_model:
+            self.factor_model.fit(X)
+
+        d, U, eig = self.factor_model.transform()
+        singular_values = np.sqrt(eig)
+
+        if sdp_kwargs is None:
+            sdp_kwargs = {}
+        s = sdp_hybrid(Sigma, d, U, singular_values=singular_values, **sdp_kwargs)
+        S = np.diag(s)
+        mul = lstsq(Sigma, S)[0]
+
+        self.mu_tilde_ = X - (X - mu) @ mul
+        Sigma_tilde = 2 * S - S @ mul + + cov_tol * np.eye(X.shape[1])
+
+        self.cholesky_ = cholesky(Sigma_tilde)
+
+    def transform(self, X: np.ndarray):
+        """
+        Creates knockoff features based on the samples X.
+        Should be used after the generator is fitted.
+
+        :param X: Data samples
+        :return: Gaussian knockoff samples
+        """
+        return sample_gaussian_knockoffs(self.mu_tilde_, self.cholesky_)
 
 def low_rank_gaussian_knockoffs_sampling_parameters(
     d: np.ndarray, U: np.ndarray, lam: np.ndarray, s: np.ndarray

@@ -5,4 +5,5 @@ from .sdp import (
     sdp_full,
     sdp_low_rank,
     cvx_sdp_full,
+    sdp_hybrid,
 )

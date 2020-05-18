@@ -6,6 +6,7 @@ from .generation import (
     FixedKnockoffs,
     GaussianKnockoffs,
     LowRankGaussianKnockoffs,
+    LowRankHybridGaussianKnockoffs,
 )
 from .factor_model import RandomizedLowRankFactorModel
 from .statistics import EstimatorStatistics
