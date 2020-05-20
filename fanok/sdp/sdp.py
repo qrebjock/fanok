@@ -1,3 +1,4 @@
+import sys, os
 import warnings
 
 import numpy as np
@@ -45,7 +46,9 @@ def sdp_equi(Sigma: np.ndarray):
     if min_eigenvalue < 0:
         raise ValueError("Sigma is not psd")
 
-    return min(1, 2 * min_eigenvalue) * np.diag(Sigma)
+    s = min(1, 2 * min_eigenvalue) * np.diag(Sigma)
+    print("SDP sol:", np.sum(s))
+    return s
 
 
 def cvx_sdp_full(Sigma: np.ndarray, solver: str = None, clip: bool = True, **kwargs):
@@ -87,6 +90,7 @@ def cvx_sdp_full(Sigma: np.ndarray, solver: str = None, clip: bool = True, **kwa
     if clip:
         s.value = np.clip(s.value, a_min=0, a_max=1)
     s.value *= np.diag(Sigma)
+    print("SDP sol:", np.sum(s))
 
     return s.value
 
@@ -148,8 +152,11 @@ def asdp(Sigma: np.ndarray, blocks: int = 2, gamma_tol: float = 1e-5, **kwargs):
     # Clustering step and solving sub SDPs
     indices, sub_Sigmas = make_asdp_clusters(Sigma, blocks)
     s = np.zeros(p)
+    _original_stdout = sys.stdout
+    sys.stdout = open(os.devnull, "w")
     for i, sub_Sigma in enumerate(sub_Sigmas):
         s[indices[i]] = solve_full_sdp(sub_Sigma, mode="sdp", **kwargs)
+    sys.stdout = _original_stdout
 
     gamma = bisect_solution(Sigma, s, gamma_tol=gamma_tol)
 
@@ -160,6 +167,7 @@ def asdp(Sigma: np.ndarray, blocks: int = 2, gamma_tol: float = 1e-5, **kwargs):
             "Consider lowering the parameter gamma_tol",
         )
     s = s * gamma
+    print("SDP sol:", np.sum(s))
 
     return s
 
@@ -201,6 +209,7 @@ def sdp_full(
 
     s = s * np.diag(Sigma)
 
+    print("SDP sol:", np.sum(s))
     if return_objectives:
         return s, objectives
     return s
@@ -260,6 +269,7 @@ def sdp_low_rank(
 
     s = s * diag_Sigma
 
+    print("SDP sol:", np.sum(s))
     if return_objectives:
         return s, objectives
     return s
@@ -298,6 +308,7 @@ def sdp_hybrid(
             "Consider lowering the parameter gamma_tol",
         )
     s = s * gamma
+    print("SDP sol:", np.sum(s))
 
     return s
 
