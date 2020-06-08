@@ -166,6 +166,7 @@ def randomized_factor_model(
         U, s = randomized_symmetric_decomposition(
             oracle, X.shape[1], rank, q, over_sample=over_sample
         )
+        s = np.clip(s, a_min=0, a_max=None)
 
         diag_U = np.sum(U * s * U, axis=1)
         d = (1 - delta) * diag_Sigma + delta * mu - diag_U
