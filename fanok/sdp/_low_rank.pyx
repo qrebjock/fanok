@@ -4,10 +4,7 @@ from scipy.linalg import qr, solve_triangular
 cimport cython
 cimport numpy as np
 
-from libc.math cimport abs as cabs
-
-from scipy.linalg.cython_blas cimport dcopy, dtrmv, dgemv, daxpy, ddot, dtrsv
-# from scipy.linalg.cython_lapack cimport dgesv
+from scipy.linalg.cython_blas cimport dgemv, ddot, dtrsv
 
 from fanok.utils._dtypes import NP_DOUBLE_D_TYPE
 from fanok.utils._qr cimport qr_update
@@ -32,7 +29,6 @@ cdef sdp_rank_k(
     int max_iterations,
     double lam,
     double mu,
-    double tol,
     double lam_min
 ):
     objectives = [0]
@@ -41,17 +37,17 @@ cdef sdp_rank_k(
         np.ndarray[double, ndim=1] s = np.zeros(p, dtype=NP_DOUBLE_D_TYPE)
         double prev_s_sum = 0, current_s_sum = 0
 
+        double a = 0, b = 0
         double kappa = 0
+        double prev_sj = 0
         double[::1] qr_work = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
-        double[::1] Rz = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
         double[::1] y = np.zeros(k, dtype=NP_DOUBLE_D_TYPE)
-        double* z = NULL
-        double b = 0, c = 0
+        double* u = NULL
 
-        double zero = 0, one = 1, minus_one = -1
+        # BLAS commonly used parameters
+        double zero = 0, one = 1
         int inc_1 = 1
         char* low = 'L'
-        char* no_trans = 'N'
         char* trans = 'T'
         char* not_unit = 'N'
 
@@ -59,37 +55,31 @@ cdef sdp_rank_k(
         prev_s_sum = current_s_sum
         current_s_sum = 0
         for j in range(p):
-            # z = U[j, :]
-            z = &U[j, 0]
+            # u = U[j, :]
+            u = &U[j, 0]
 
-            kappa = 2 / (s[j] - 2 * d[j])
-            qr_update(k, Q, R, &kappa, z, z, &qr_work[0])
+            # y = Q.T @ u
+            dgemv(trans, &k, &k, &one, &Q[0, 0], &k, u, &inc_1, &zero, &y[0], &inc_1)
 
-            # Rz = R @ z
-            dcopy(&k, z, &inc_1, &Rz[0], &inc_1)
-            dtrmv(low, trans, not_unit, &k, &R[0, 0], &k, &Rz[0], &inc_1)
+            # y = (Q R)^{-1} u
+            dtrsv(low, trans, not_unit, &k, &R[0, 0], &k, &y[0], &inc_1)
 
-            # y = Q @ R @ z
-            dgemv(no_trans, &k, &k, &one, &Q[0, 0], &k, &Rz[0], &inc_1, &zero, &y[0], &inc_1)
-            # y = Q @ R @ z - z
-            daxpy(&k, &minus_one, z, &inc_1, &y[0], &inc_1)
+            # a = u^T (Q R)^{-1} u
+            a = ddot(&k, &y[0], &inc_1, u, &inc_1)
 
-            # b = z @ y
-            b = ddot(&k, z, &inc_1, &y[0], &inc_1)
+            b = 2 * (
+                (2 * d[j] - s[j]) * (d[j] - diag_Sigma[j]) - (s[j] - 2 * diag_Sigma[j]) * a
+            ) / (2 * d[j] - s[j] - 2 * a)
 
-            # Rz = Rz - Q.T @ z
-            dgemv(trans, &k, &k, &minus_one, &Q[0, 0], &k, z, &inc_1, &one, &Rz[0], &inc_1)
+            prev_sj = s[j]
+            s[j] = _clip(2 * diag_Sigma[j] - lam + b, 0, 1)
 
-            # Solve triangular
-            dtrsv(low, trans, not_unit, &k, &R[0, 0], &k, &Rz[0], &inc_1)
+            if 2 * d[j] - s[j] == 0:
+                return s, objectives
 
-            # c = y @ Rz
-            c = ddot(&k, &y[0], &inc_1, &Rz[0], &inc_1)
-
-            s[j] = _clip(2 * diag_Sigma[j] - 2 * b - lam + 2 * c, 0, 1)
-
-            kappa = 2 / (2 * d[j] - s[j])
-            qr_update(k, Q, R, &kappa, z, z, &qr_work[0])
+            if s[j] != prev_sj:
+                kappa = 2 * (s[j] - prev_sj) / (2 * d[j] - s[j]) / (2 * d[j] - prev_sj)
+                qr_update(k, Q, R, &kappa, u, u, &qr_work[0])
 
             current_s_sum += s[j]
 
@@ -108,7 +98,6 @@ def _sdp_low_rank(
     max_iterations=None,
     lam=None,
     mu=None,
-    tol=-1,
     eps=1e-5,
     return_objectives=False
 ):
@@ -148,8 +137,6 @@ def _sdp_low_rank(
         lam = mu * lam
     elif lam <= 0:
         raise ValueError(f"The barrier parameter lam must be positive. Found {lam}.")
-    # if tol < 0:
-    #     raise ValueError(f"The tolerance cannot be negative. Found {tol}.")
     if eps < 0:
         raise ValueError(f"eps cannot be negative. Found {eps}")
     if max_iterations is None:
@@ -162,7 +149,7 @@ def _sdp_low_rank(
 
     # Cython fast solver
     s, objectives = sdp_rank_k(
-        p, k, d, U, diag_Sigma, Q, R, max_iterations, lam, mu, tol, lam_min
+        p, k, d, U, diag_Sigma, Q, R, max_iterations, lam, mu, lam_min
     )
 
     if return_objectives:
