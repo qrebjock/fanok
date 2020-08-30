@@ -169,7 +169,6 @@ def sdp_full(
     max_iterations: int = None,
     lam: float = None,
     mu: float = None,
-    tol: float = -1,
     eps=1e-5,
     return_objectives: bool = False,
 ):
@@ -194,7 +193,6 @@ def sdp_full(
         max_iterations=max_iterations,
         lam=lam,
         mu=mu,
-        tol=tol,
         eps=eps,
         return_objectives=True,
     )
@@ -213,7 +211,6 @@ def sdp_low_rank(
     max_iterations: int = None,
     lam: float = None,
     mu: float = None,
-    tol: float = -1,
     eps: float = 1e-5,
     return_objectives: bool = False,
 ):
@@ -253,7 +250,6 @@ def sdp_low_rank(
         max_iterations=max_iterations,
         lam=lam,
         mu=mu,
-        tol=tol,
         eps=eps,
         return_objectives=True,
     )
@@ -273,20 +269,11 @@ def sdp_hybrid(
     max_iterations: int = None,
     lam: float = None,
     mu: float = None,
-    tol: float = -1,
     eps: float = 1e-5,
     gamma_tol=1e-5,
 ):
     s = sdp_low_rank(
-        d,
-        U,
-        singular_values,
-        max_iterations,
-        lam,
-        mu,
-        tol,
-        eps,
-        return_objectives=False,
+        d, U, singular_values, max_iterations, lam, mu, eps, return_objectives=False,
     )
 
     gamma = bisect_solution(Sigma, s, gamma_tol=gamma_tol)

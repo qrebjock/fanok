@@ -28,7 +28,6 @@ cdef __full_rank(
     int max_iterations,
     double lam,
     double mu,
-    double tol,
     double lam_min
 ):
     objectives = [0]
@@ -82,9 +81,6 @@ cdef __full_rank(
 
         objectives.append(current_s_sum)
 
-        if current_s_sum == 0 or abs(current_s_sum - prev_s_sum) / current_s_sum < tol:
-            break
-
         if lam < lam_min:
             break
 
@@ -98,7 +94,6 @@ def _full_rank(
     max_iterations=None,
     lam=None,
     mu=None,
-    tol=-1,  # This parameter will likely disappear in the future
     eps=1e-5,
     return_objectives=False
 ):
@@ -128,8 +123,6 @@ def _full_rank(
         lam = mu * lam
     elif lam <= 0:
         raise ValueError(f"The barrier parameter lam must be positive. Found {lam}.")
-    # if tol < 0:
-    #     raise ValueError(f"The tolerance cannot be negative. Found {tol}.")
     if eps < 0:
         raise ValueError(f"eps cannot be negative. Found {eps}")
     if max_iterations is None:
@@ -141,7 +134,7 @@ def _full_rank(
     lam_min = eps / 3  # Average eps. Default global one, divide by p too
 
     # Cython fast solver
-    s, objectives = __full_rank(p, Sigma, R, max_iterations, lam, mu, tol, lam_min)
+    s, objectives = __full_rank(p, Sigma, R, max_iterations, lam, mu, lam_min)
 
     if return_objectives:
         return s, objectives
