@@ -44,6 +44,10 @@ See the folder `examples/` for more illustrations,
 and in particular with fixed and low-rank knockoffs.
 We also provide a notebook with an example on text data.
 
+## Paper
+
+You may find additional information in our [paper](https://arxiv.org/abs/2006.08790).
+
 ## References
 
 <a id="1">[1]</a>

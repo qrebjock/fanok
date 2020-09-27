@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="fanok",
-    version="0.0.3",
+    version="0.0.4",
     packages=find_packages(),
     license="MIT",
     python_requires=">=3.5.0",
