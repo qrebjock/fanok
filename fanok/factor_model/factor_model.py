@@ -245,3 +245,6 @@ class RandomizedLowRankFactorModel(FactorModel):
         Returns the covariance approximation.
         """
         return self.d_, self.U_, self.s_
+
+    def reconstruct(self):
+        return np.diag(self.d_) + (self.U_ * self.s_) @ self.U_.T

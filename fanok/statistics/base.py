@@ -118,7 +118,7 @@ class EstimatorStatistics(AntisymmetricStatistics):
         self.absolute = absolute
 
     def evaluate_antisymmetric(self, X, X_tilde, y):
-        stats = self.estimator.fit(np.hstack((X, X_tilde)), y).coef_
+        stats = self.estimator.fit(np.hstack((X, X_tilde)), y).coef_.squeeze()
         if self.absolute:
             stats = np.abs(stats)
         return stats
